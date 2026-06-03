@@ -6,11 +6,9 @@
 ## 🛑 Why your `/goal` runs go nowhere
 
 You've probably tried `/goal` in Claude Code or Codex, or wired up a
-Ralph Loop. What happens, every time:
-
-- either it runs for a few minutes, decides "task complete", and stops —
-- or it stutters, hangs, gets stuck waiting for you on every ambiguous
-  decision.
+Ralph Loop. What happens, every time: either it runs for a few minutes
+and just stops, or it drifts off the main thread and keeps needing you
+to step in for decisions.
 
 That's not perpetual. That's just "unattended for 20 minutes."
 
@@ -30,12 +28,10 @@ and how `perpetuum` fixes each:
 
 | What you've seen | Why it happens | What `perpetuum` does |
 |---|---|---|
-| ⏱️ Runs 20 min and stops — you wanted overnight | Single-session loop, no real continuation beyond one task | Triggers (schedule / conditional / webhook) keep the loop alive across cycles, restarts, days |
+| ⏱️ Runs 20 min, the agent declares "task complete", and stops — you wanted overnight | Single-session loop where the same context both produces and judges; the agent self-certifies "done" and there's no continuation mechanism | Three layers (middle judges, fresh inner via `cc-use` produces — no shared context, no self-certifying) + triggers (schedule / conditional / webhook) keep the loop alive across cycles, restarts, days |
 | 🪨 Makes bad calls, drifts off the main thread, or stalls waiting for you on every ambiguity | When unsure, the agent has only three options: guess wrong, wander off-track, or block on you | Async `escalations.md` — loop keeps going on everything else while you answer offline; the agent surfaces ambiguous decisions with A/B/C options instead of guessing or stalling |
-| 🤡 Agent self-certifies "done" | Same context produces and judges | Three layers: middle judges, fresh inner via `cc-use` produces — they never share context |
 | 🐛 Silent regression | No ratchet to roll back bad steps | Every accepted finding becomes a local `git commit`; rejects never enter history |
 | 🧠 Context rot after a few hours | All state lives in conversation | State lives in markdown files; middle re-reads them every cycle |
-| 🔀 Plan and execute entangled | One prompt does both | Two prompts per cycle (`1_explore.md`, `2_execute.md`); drop `3_reflect.md` in to add reflection |
 
 ## 📦 Installation
 
