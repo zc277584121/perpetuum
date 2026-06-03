@@ -31,7 +31,7 @@ and how `perpetuum` fixes each:
 | What you've seen | Why it happens | What `perpetuum` does |
 |---|---|---|
 | ⏱️ Runs 20 min and stops — you wanted overnight | Single-session loop, no real continuation beyond one task | Triggers (schedule / conditional / webhook) keep the loop alive across cycles, restarts, days |
-| 🪨 Stutters, gets stuck waiting for you on every ambiguity | Human-in-loop is a hard wall — no progress until you reply | Async `escalations.md` — loop keeps going on everything else while you answer offline |
+| 🪨 Makes bad calls, drifts off the main thread, or stalls waiting for you on every ambiguity | When unsure, the agent has only three options: guess wrong, wander off-track, or block on you | Async `escalations.md` — loop keeps going on everything else while you answer offline; the agent surfaces ambiguous decisions with A/B/C options instead of guessing or stalling |
 | 🤡 Agent self-certifies "done" | Same context produces and judges | Three layers: middle judges, fresh inner via `cc-use` produces — they never share context |
 | 🐛 Silent regression | No ratchet to roll back bad steps | Every accepted finding becomes a local `git commit`; rejects never enter history |
 | 🧠 Context rot after a few hours | All state lives in conversation | State lives in markdown files; middle re-reads them every cycle |
