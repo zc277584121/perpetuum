@@ -25,7 +25,9 @@ Loop yourself, you've probably hit some flavor of this:
   and judges in the same prompt — which means it often commits things it
   hadn't really planned, or plans things it isn't going to do.
 
-`perpetuum` (永动机) is the combination of mechanisms that fixes those
+`perpetuum` (Latin for "perpetual motion" — the name is ironic; perpetual
+motion is impossible, but with the right scaffolding the loop can come
+close enough) is the combination of mechanisms that fixes those
 specific failures. It isn't a smarter model and it isn't a bigger
 framework. It's a thin skill that arranges things so:
 
