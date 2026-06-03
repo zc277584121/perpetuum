@@ -19,12 +19,6 @@ MIDDLE_SESSION="middle-style-$(basename "$PROJECT_ROOT")"
 #   AGENT_CMD="codex --full-auto" .perpetuum/<task>/trigger.sh
 # Other coding-CLI agents (Cursor, Windsurf, etc.) work too — set AGENT_CMD
 # to whatever command starts that agent in your terminal.
-#
-# If you use a Codex bypass mode above, also export CC_USE_CODEX_FLAGS
-# so cc-use spawns the inner Codex with the same bypass flags
-# (otherwise --ask-for-approval / --sandbox conflict and the inner
-# session fails to start). Example:
-#   export CC_USE_CODEX_FLAGS="--dangerously-bypass-approvals-and-sandbox"
 AGENT_CMD="${AGENT_CMD:-claude --dangerously-skip-permissions}"
 
 MAX_ITER=50                        # style runs typically need many cycles

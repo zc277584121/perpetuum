@@ -343,19 +343,7 @@ what the extra send-key lines are for:
    `send_prompt` detects Codex via `$AGENT_CMD` and sends `Escape`
    after paste to dismiss it.
 
-If your outer Codex was launched with
-`--dangerously-bypass-approvals-and-sandbox` (or `--full-auto`), you
-also need to tell cc-use to match that mode when spawning Layer 1, or
-the inner Codex will fail to start. Set the env var before launching
-`trigger.sh`:
-
-```bash
-export CC_USE_CODEX_FLAGS="--dangerously-bypass-approvals-and-sandbox"
-# or, safer:
-export CC_USE_CODEX_FLAGS="--full-auto"
-```
-
-The execute prompts in `examples/` also instruct the middle agent to
+The execute prompts in `examples/` instruct the middle agent to
 **escalate** any cc-use failure rather than work around it locally —
 surface it as a blocked-on-environment item in `escalations.md` and
 stop the cycle, do not fake a fresh inner context within your own
