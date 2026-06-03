@@ -86,7 +86,8 @@ wait_for_done() {
 
 run_cycle() {
   local cycle_id="$1"
-  for prompt_file in $(ls "$TASK_DIR"/[0-9]*_*.md | sort); do
+  # Glob the prompts/ subdirectory in lexical order: 1_explore.md → 2_execute.md → ...
+  for prompt_file in $(ls "$TASK_DIR"/prompts/[0-9]*_*.md | sort); do
     local phase=$(basename "$prompt_file" .md)
     local prompt_text=$(sed "s/\${CYCLE_ID}/$cycle_id/g" "$prompt_file")
     log "[$phase] sending prompt"

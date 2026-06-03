@@ -137,8 +137,9 @@ When a task is initialized:
     └── <task-name>/
         ├── _meta.md             worktree/branch metadata
         ├── trigger.sh           per-task; adjusted during setup
-        ├── 1_explore.md         prompt 1: plan
-        ├── 2_execute.md         prompt 2: dispatch + judge + record
+        ├── prompts/
+        │   ├── 1_explore.md     prompt 1: plan
+        │   └── 2_execute.md     prompt 2: dispatch + judge + record
         ├── plan.md              agent-maintained state machine
         ├── inbox.md             human → agent
         ├── escalations.md       agent ↔ human
@@ -147,10 +148,16 @@ When a task is initialized:
             └── .cycle_done_*    per-cycle sync flags (transient)
 ```
 
-Any file matching `[0-9]+(\.[0-9]+)?_*.md` in the task directory is
-fed to Layer 2 in lexical order, one per cycle phase. Default is 2
-(`1_explore.md`, `2_execute.md`); add `3_reflect.md` for a reflection
-phase, `1.5_check.md` to insert a step between, etc.
+Any file matching `prompts/[0-9]+(\.[0-9]+)?_*.md` is fed to Layer 2
+in lexical order, one per cycle phase. Default is 2
+(`prompts/1_explore.md`, `prompts/2_execute.md`); add
+`prompts/3_reflect.md` for a reflection phase,
+`prompts/1.5_check.md` to insert a step between, etc.
+
+Keeping prompts in a subdirectory separates editable templates from
+runtime state (`plan.md` / `inbox.md` / `escalations.md`) — users can
+edit the `prompts/` dir freely without mixing prompt edits and state
+edits.
 
 ### What the state files actually look like
 

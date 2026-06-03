@@ -62,7 +62,7 @@ wait_for_done() {
 
 run_cycle() {
   local cid="$1"
-  for pf in $(ls "$TASK_DIR"/[0-9]*_*.md 2>/dev/null | sort); do
+  for pf in $(ls "$TASK_DIR"/prompts/[0-9]*_*.md 2>/dev/null | sort); do
     local phase; phase=$(basename "$pf" .md | sed 's/[^a-zA-Z0-9_]/_/g')
     log "[$phase] sending prompt"
     local pt; pt=$(sed "s/\${CYCLE_ID}/${cid}-${phase}/g" "$pf")

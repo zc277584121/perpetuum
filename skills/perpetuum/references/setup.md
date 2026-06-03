@@ -60,11 +60,11 @@ For each file in the chosen example:
 
 1. Copy to `.perpetuum/<task-name>/`
 2. Customize. Specifically:
-   - **`1_explore.md`** — rewrite to describe the task's actual scope.
-     Use the example's structure (read history, plan new items, append
-     to `plan.md`, write done-flag) but replace the task-specific
+   - **`prompts/1_explore.md`** — rewrite to describe the task's actual
+     scope. Use the example's structure (read history, plan new items,
+     append to `plan.md`, write done-flag) but replace the task-specific
      instructions. Use the user's language.
-   - **`2_execute.md`** — adjust the dispatch logic. The
+   - **`prompts/2_execute.md`** — adjust the dispatch logic. The
      `cc-use delegate --project /abs/path --agent <agent-family>` line
      must use the **absolute path** of the project (or the worktree
      path, if using worktrees). `--agent` should match the host
