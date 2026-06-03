@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# perpetuum task: adversarial-testing
+# Trigger type: schedule
+#
+# Cycle: paste prompt 1 (explore) → wait done flag (or silence fallback)
+#     -> paste prompt 2 (execute) → wait done flag (or silence fallback)
+#     -> sleep, then next cycle, up to MAX_ITER total.
+#
+# Control:
+#   pause    : touch .paused              (resume: remove it)
+#   stop     : touch .stop_after_current  (graceful exit after current cycle)
+#   kill     : pkill -f trigger.sh; tmux kill-session -t $MIDDLE_SESSION
+
+set -uo pipefail
+
+# ============================ Configuration ===============================
+TASK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# PROJECT_ROOT defaults to the worktree root (two levels above .perpetuum/<task>)
+# Override if you keep .perpetuum/ at a non-standard depth.
+PROJECT_ROOT="$(cd "$TASK_DIR/../.." && pwd)"
+
+# Unique tmux session name. Two perpetuum tasks must not share this.
+MIDDLE_SESSION="middle-adv-$(basename "$PROJECT_ROOT")"
+
+MAX_ITER=20
+SLEEP_BETWEEN_CYCLES=120           # 2 min — see SKILL.md cost note before running
+WAIT_PHASE_TIMEOUT=21600           # 6h per phase before force-end (generous)
+SILENCE_THRESHOLD=1200             # 20 min tmux silence = phase done (fallback)
+POLL_INTERVAL=30                   # check every 30s
+TUI_BOOT_WAIT=25                   # wait after spawning fresh CC TUI
+# ==========================================================================
+
+LOG="$TASK_DIR/trigger.log"
+
+log() { echo "[$(date '+%F %T')] $*" | tee -a "$LOG"; }
+
+ensure_middle_session() {
+  if ! tmux has-session -t "$MIDDLE_SESSION" 2>/dev/null; then
+    log "Starting $MIDDLE_SESSION (cwd=$PROJECT_ROOT)"
+    tmux new-session -d -s "$MIDDLE_SESSION" -c "$PROJECT_ROOT" \
+      'claude --dangerously-skip-permissions'
+    sleep "$TUI_BOOT_WAIT"
+  fi
+}
+
+# Paste a multi-line prompt into the middle TUI using a tmux buffer
+# (set-keys with long text races; paste-buffer is atomic).
+send_prompt() {
+  local prompt_text="$1"
+  tmux set-buffer -b adv_prompt "$prompt_text"
+  tmux paste-buffer -t "$MIDDLE_SESSION" -b adv_prompt
+  sleep 1
+  tmux send-keys -t "$MIDDLE_SESSION" Enter
+  sleep 1
+  tmux send-keys -t "$MIDDLE_SESSION" Enter 2>/dev/null || true
+}
+
+# Three-layered sync: flag file → tmux pane silence → total timeout
+wait_for_done() {
+  local cycle_id="$1"
+  local timeout="$2"
+  local flag="$TASK_DIR/state/.cycle_done_${cycle_id}"
+  local start
+  start=$(date +%s)
+  local prev=""
+  local silent=0
+
+  log "  waiting for: $(basename "$flag") (timeout=${timeout}s, silence=${SILENCE_THRESHOLD}s)"
+
+  while true; do
+    sleep "$POLL_INTERVAL"
+
+    if [ -f "$flag" ]; then
+      log "  -> done via flag: $(cat "$flag")"
+      rm -f "$flag"
+      return 0
+    fi
+
+    local snap
+    snap=$(tmux capture-pane -t "$MIDDLE_SESSION" -p 2>/dev/null | sha256sum | awk '{print $1}')
+    if [ "$snap" = "$prev" ]; then
+      silent=$((silent + POLL_INTERVAL))
+      if [ "$silent" -ge "$SILENCE_THRESHOLD" ]; then
+        log "  -> done via silence (${silent}s)"
+        return 0
+      fi
+    else
+      silent=0
+      prev="$snap"
+    fi
+
+    if [ $(($(date +%s) - start)) -ge "$timeout" ]; then
+      log "  -> force-end via timeout"
+      return 1
+    fi
+  done
+}
+
+run_cycle() {
+  local cycle_id="$1"
+  for prompt_file in $(ls "$TASK_DIR"/[0-9]*_*.md 2>/dev/null | sort); do
+    local phase
+    phase=$(basename "$prompt_file" .md | sed 's/[^a-zA-Z0-9_]/_/g')
+    log "[$phase] sending prompt"
+    local prompt_text
+    prompt_text=$(sed "s/\${CYCLE_ID}/${cycle_id}-${phase}/g" "$prompt_file")
+    send_prompt "$prompt_text"
+    wait_for_done "${cycle_id}-${phase}" "$WAIT_PHASE_TIMEOUT"
+    log "[$phase] complete"
+  done
+}
+
+check_pause() {
+  while [ -f "$TASK_DIR/.paused" ]; do
+    log "paused, waiting for $TASK_DIR/.paused removal..."
+    sleep 60
+  done
+}
+
+check_stop() {
+  [ -f "$TASK_DIR/.stop_after_current" ]
+}
+
+# =============================== Main loop ================================
+main() {
+  mkdir -p "$TASK_DIR/state"
+  touch "$TASK_DIR/plan.md" "$TASK_DIR/inbox.md" "$TASK_DIR/escalations.md"
+
+  log ""
+  log "===== perpetuum adversarial-testing started, MAX_ITER=$MAX_ITER ====="
+  log "project: $PROJECT_ROOT"
+  log "session: $MIDDLE_SESSION"
+  log ""
+
+  ensure_middle_session
+
+  for ITER in $(seq 1 "$MAX_ITER"); do
+    check_pause
+    check_stop && { log "graceful stop requested"; break; }
+
+    log ""
+    log "########## ITER $ITER / $MAX_ITER ##########"
+    run_cycle "${ITER}-$(date +%s)"
+
+    check_stop && { log "graceful stop after cycle $ITER"; break; }
+
+    if [ "$ITER" -lt "$MAX_ITER" ]; then
+      log "Sleeping ${SLEEP_BETWEEN_CYCLES}s before next cycle..."
+      sleep "$SLEEP_BETWEEN_CYCLES"
+    fi
+  done
+
+  log ""
+  log "===== complete after $ITER iterations ====="
+}
+
+main "$@"
