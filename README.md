@@ -57,13 +57,13 @@ uses to fix each:
    when they hit something they can't decide alone. They guess wrong
    or stop and wait — and if you're not at the terminal, "wait"
    means dead.
-   **→ perpetuum** has three async channels — `escalations.md`
-   (agent surfaces A/B/C options for ambiguous decisions),
-   `inbox.md` (you push instructions back in whenever), plus your
-   host coding agent itself, which monitors all the files and
-   translates your natural-language asks into the right file
-   operations) — so the loop keeps progressing while you answer at
-   your own pace.
+   **→ perpetuum** makes the human-in-the-loop interaction
+   asynchronous. When the agent hits something only you can decide,
+   it writes the question down (along with the concrete options it
+   considered) and keeps going on everything else; you answer in
+   your own time. You can also nudge the running loop with a new
+   instruction at any moment without stopping it. Nothing blocks on
+   you being at the keyboard.
 
 📖 **For the full design rationale with ASCII diagrams of each
 problem and its solution, see [The three core problems,
