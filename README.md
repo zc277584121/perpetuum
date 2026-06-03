@@ -28,10 +28,10 @@ and how `perpetuum` fixes each:
 
 | What you've seen | Why it happens | What `perpetuum` does |
 |---|---|---|
-| ⏱️ Runs 20 min, the agent declares "task complete", and stops — you wanted overnight | Single-session loop where the same context both produces and judges; the agent self-certifies "done" and there's no continuation mechanism | Three layers (middle judges, fresh inner via `cc-use` produces — no shared context, no self-certifying) + triggers (schedule / conditional / webhook) keep the loop alive across cycles, restarts, days |
-| 🪨 Makes bad calls, drifts off the main thread, or stalls waiting for you on every ambiguity | When unsure, the agent has only three options: guess wrong, wander off-track, or block on you | Async `escalations.md` — loop keeps going on everything else while you answer offline; the agent surfaces ambiguous decisions with A/B/C options instead of guessing or stalling |
-| 🐛 Silent regression | No ratchet to roll back bad steps | Every accepted finding becomes a local `git commit`; rejects never enter history |
-| 🧠 Context rot after a few hours | All state lives in conversation | State lives in markdown files; middle re-reads them every cycle |
+| ⏱️ Runs 20 min, the agent declares "task complete", and stops — you wanted overnight | Single-session loop where the same context both produces and judges; the agent **self-certifies** "done" and there's no continuation mechanism | **GAN-like three-layer split** (middle judges, fresh inner via `cc-use` produces — no shared context, no self-certifying) + **trigger abstraction** (schedule / conditional / webhook) keeps the loop alive across cycles, restarts, days |
+| 🪨 Makes bad calls, drifts off the main thread, or stalls waiting for you on every ambiguity | When unsure, the agent has only three options: guess wrong, wander off-track, or block on you | **Async escalation channel** — `escalations.md` surfaces ambiguous decisions with A/B/C options instead of guessing or stalling; the loop keeps progressing on everything else while you answer offline |
+| 🐛 Silent regression | No **ratchet** to roll back bad steps | Every accepted finding becomes a local `git commit`; rejects never enter history. The branch is monotonically improving (à la Karpathy AutoResearch) |
+| 🧠 Context rot after a few hours | All state lives in conversation | **File-based persistent history** — `plan.md` / `inbox.md` / `escalations.md` survive across sessions; the middle agent re-reads them every cycle instead of relying on context memory |
 
 ## 📦 Installation
 
@@ -82,63 +82,80 @@ with you, then launches.
 
 ```
         ┌─────────────────────────────────────────────────────────────────┐
-        │ 👤  Layer 4   you + host coding agent (Claude Code / Codex)     │
-        │     you describe the task in natural language                   │
-        │     agent sets up files, monitors, relays nudges (optional)     │
+        │ 👁️ Layer 4   you + host agent — global monitor & control       │
+        │     describe task; watch via `tail` / `tmux -r`; nudge via files│
+        │     pause / resume / stop signals; relay natural-language ops   │
         └────────────────────────────────┬────────────────────────────────┘
                                          │ launches
                                          ▼
-        ┌─────────────────────────────────────────────────────────────────┐
-        │ ⏰  Layer 3   trigger.sh — the dumb heartbeat                   │
-        │     loop until MAX_ITER or .stop_after_current:                 │
-        │       check .paused signal                                      │
-        │       paste 1_explore.md → wait for done flag                   │
-        │       paste 2_execute.md → wait for done flag                   │
-        │       sleep SLEEP_BETWEEN_CYCLES                                │
-        │     trigger modes:  schedule  |  conditional  |  webhook        │
-        └────────────────────────────────┬────────────────────────────────┘
-                                         │ pastes prompt into tmux
-                                         ▼
-        ┌─────────────────────────────────────────────────────────────────┐
-        │ 🧠  Layer 2   middle agent — persistent CC TUI inside tmux      │
-        │                                                                 │
-        │     ┌─ 🔍 phase 1: EXPLORE ─────────────────────────────────┐   │
-        │     │ read plan.md, inbox.md, escalations.md ## Resolved    │   │
-        │     │ list testing dimensions, sample new items             │   │
-        │     │ append to plan.md ## Pending                          │   │
-        │     └──────────────────────────────────────────────────────┘   │
-        │                                                                 │
-        │     ┌─ ⚖️  phase 2: EXECUTE ────────────────────────────────┐   │
-        │     │ for each Pending item:                                │   │
-        │     │   cc-use delegate ──► Layer 1                         │   │
-        │     │   judge inner agent's report:                         │   │
-        │     │      ✅ PASS  → record to plan.md ## Done             │   │
-        │     │      🐛 BUG   → fix + commit (ratchet ↑)              │   │
-        │     │      ❓ AMBIG → escalations.md ## Open (async)        │   │
-        │     └──────────────────────────────────────────────────────┘   │
-        └────────────────────────────────┬────────────────────────────────┘
-                                         │ cc-use delegate (per item)
-                                         ▼
-        ┌─────────────────────────────────────────────────────────────────┐
-        │ 🤖  Layer 1   inner agent — fresh CC, zero priors               │
-        │     runs the actual operation: CLI command, code read, edit.    │
-        │     returns observations to Layer 2. Has no memory of           │
-        │     previous cycles → cannot rubber-stamp known behavior.       │
-        └─────────────────────────────────────────────────────────────────┘
+   ↻ ↻ ↻ ┌─────────────────────────────────────────────────────────────────┐
+   ↻     │ ⏰ Layer 3   trigger.sh — heartbeat, loops every cycle ↻        │
+   ↻     │     loop until MAX_ITER or .stop_after_current:                 │
+   ↻     │       check .paused signal                                      │
+   ↻     │       paste 1_explore.md → wait for done flag                   │
+   ↻     │       paste 2_execute.md → wait for done flag                   │
+   ↻     │       sleep SLEEP_BETWEEN_CYCLES                                │
+   ↻ ↻ ↻ │     trigger modes:  schedule  |  conditional  |  webhook        │
+         └────────────────────────────────┬────────────────────────────────┘
+                                          │ pastes prompt into tmux
+                                          ▼
+         ┌─────────────────────────────────────────────────────────────────┐
+         │ 🧠 Layer 2   middle agent — judge + dispatcher (persistent TUI) │
+         │                                                                 │
+         │     ┌─ 🔍 phase 1: EXPLORE ────────────────────────────────┐    │
+         │     │ read plan.md / inbox.md / escalations.md ## Resolved │    │
+         │     │ sample new items (Cartesian product of dimensions)   │    │
+         │     │ append to plan.md ## Pending                         │    │
+         │     └─────────────────────────────────────────────────────┘    │
+         │                                                                 │
+         │     ┌─ ⚖️ phase 2: EXECUTE ────────────────────────────────┐    │
+         │     │ for each Pending item:                                │    │
+         │     │    cc-use delegate ──► Layer 1                        │    │
+         │     │    Layer 1 reports observations back ◄──┐             │    │
+         │     │    judge the report:                    │             │    │
+         │     │       ✅ PASS  → record to plan.md ## Done            │    │
+         │     │       🐛 BUG   → dispatch fix + `git commit` (ratchet)│    │
+         │     │       ❓ AMBIG → escalations.md ## Open (async)       │    │
+         │     └─────────────────────────────────────────────────────┘    │
+         └────────────────────────────────┬───────────────────────┬────────┘
+                                          │ dispatch              ▲
+                                          ▼                       │ report back
+         ┌─────────────────────────────────────────────────────────┴───────┐
+         │ 🤖 Layer 1   inner agent — fresh CC, zero priors                │
+         │     runs the actual operation: CLI command, code read, edit.    │
+         │     observes outcome, returns findings to Layer 2.              │
+         │     no memory of previous cycles → can't rubber-stamp behavior  │
+         └─────────────────────────────────────────────────────────────────┘
 ```
 
-Two design choices in this layout do the most work:
+A few design choices in this layout do the most work — these are also
+the answers to "what's the technique behind this?":
 
-- **Layer 2 judges, Layer 1 produces, and they share no context.**
-  This is the mechanism that prevents self-certifying. Layer 2 sees
-  the whole history but can't run the work itself; Layer 1 runs the
-  work but can't see history. Neither can fake a result the other
-  would accept.
+- **GAN-like discriminator / generator split** between Layer 2 (judge)
+  and Layer 1 (producer). They share no context — Layer 2 sees the whole
+  history but can't run the work itself; Layer 1 runs the work but can't
+  see history. Neither can fake a result the other would accept. This
+  is what stops the self-certifying problem you see in `/goal` and Ralph
+  Loop, where the same agent both produces and judges.
+- **Monotonic ratchet** via local `git commit`. Every accepted finding
+  is a commit; every reject is a `git reset`. The branch is therefore
+  monotonically improving — borrowed from Karpathy's AutoResearch
+  pattern, but without requiring a scalar metric.
+- **Exploration vs exploitation as separate prompts.** Phase 1
+  (`1_explore.md`) is divergent — list new dimensions, sample broadly,
+  populate the backlog. Phase 2 (`2_execute.md`) is convergent — work
+  through the backlog one item at a time, commit or escalate. Merging
+  them into one prompt is what makes long Ralph-style runs go off the
+  rails.
+- **File-based persistent history** — `plan.md` is the running log of
+  what's been tried, what worked, what was escalated. The middle agent
+  re-reads it every cycle, so context rot can't accumulate and a session
+  can be paused, killed, or relaunched without losing state.
 - **Layer 3 is intentionally dumb.** It only paces and signals. All
-  decisions live in Layer 2's two prompt files, which you can edit
-  at any time without restarting anything. The trigger is per-task,
-  not per-skill, so a task can change its own heartbeat without
-  touching the rest of the system.
+  decisions live in Layer 2's two prompt files, which you can edit at
+  any time without restarting anything. Trigger configuration is
+  per-task (not per-skill), so a task can change its own heartbeat
+  without touching the rest of the system.
 
 Layer 4 is optional — you can interact with the state files directly.
 The host agent is just a friendlier UI on top of the same file
