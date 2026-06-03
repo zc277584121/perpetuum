@@ -38,29 +38,6 @@ task or operate on a running one.
 
 If the user's intent is unclear, ask. Don't guess.
 
-## Language rule
-
-The markdown files this skill generates (`plan.md`, `inbox.md`,
-`escalations.md`, the two prompt files, READMEs in `.perpetuum/<task>/`,
-and any text you write *into* those files at runtime) are **for the user
-to read**. Their language should match the user's.
-
-So: if the user speaks Chinese (or any other language) and does not
-explicitly ask for another, generate all human-facing content
-(prompts, plan items, escalation entries, status messages) in that
-language.
-
-**Boundary:** this rule applies *only* to perpetuum's own files and to
-the perpetuum ↔ human interaction. It does **not** apply to the project's
-own code, code comments, commit messages, documentation, or anything the
-inner agent produces *as part of the actual task work* — those follow the
-project's existing conventions. If the project writes commits in English,
-the inner agent writes commits in English even when the user talks to you
-in Chinese.
-
-File names, config keys, shell variables, and scripts are always English
-(cross-language stable).
-
 ## Dependencies (check before init)
 
 Before initializing a new task, confirm:
@@ -276,3 +253,26 @@ hesitate when you mention cost, default to 20 minutes or longer.
 - Don't promise the user it'll run forever. The point of "perpetuum" is
   ironic — what it actually gives you is "keep going across calendar time
   without losing state".
+
+## Language rule
+
+The markdown files this skill generates (`plan.md`, `inbox.md`,
+`escalations.md`, the two prompt files, READMEs in `.perpetuum/<task>/`,
+and any text you write *into* those files at runtime) are **for the user
+to read**. Their language should match the user's.
+
+So: if the user speaks Chinese (or any other language) and does not
+explicitly ask for another, generate all human-facing content
+(prompts, plan items, escalation entries, status messages) in that
+language.
+
+**Boundary:** this rule applies *only* to perpetuum's own files and to
+the perpetuum ↔ human interaction. It does **not** apply to the project's
+own code, code comments, commit messages, documentation, or anything the
+inner agent produces *as part of the actual task work* — those follow the
+project's existing conventions. If the project writes commits in English,
+the inner agent writes commits in English even when the user talks to you
+in Chinese.
+
+File names, config keys, shell variables, and scripts are always English
+(cross-language stable).
