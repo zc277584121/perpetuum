@@ -41,14 +41,27 @@ ensure_middle_session() {
   fi
 }
 
+# Send a multi-line prompt into the middle TUI using the same key sequence
+# cc-use uses: C-u (clear input) → load-buffer from tmpfile → paste-buffer -d
+# → Enter → C-m → Enter. The triple-submit handles a known Codex CLI TUI
+# quirk in tmux where Enter alone sometimes doesn't commit
+# (https://github.com/openai/codex/issues/12645). Claude Code accepts the
+# same sequence without issue, so we don't branch by agent.
 send_prompt() {
-  local p="$1"
-  tmux set-buffer -b style_prompt "$p"
-  tmux paste-buffer -t "$MIDDLE_SESSION" -b style_prompt
-  sleep 1
+  local prompt_text="$1"
+  local tmp
+  tmp=$(mktemp)
+  printf '%s' "$prompt_text" > "$tmp"
+  tmux send-keys -t "$MIDDLE_SESSION" C-u
+  tmux load-buffer -b pp_prompt "$tmp"
+  tmux paste-buffer -d -b pp_prompt -t "$MIDDLE_SESSION"
+  rm -f "$tmp"
+  sleep 0.5
   tmux send-keys -t "$MIDDLE_SESSION" Enter
-  sleep 1
-  tmux send-keys -t "$MIDDLE_SESSION" Enter 2>/dev/null || true
+  sleep 0.7
+  tmux send-keys -t "$MIDDLE_SESSION" C-m
+  sleep 0.7
+  tmux send-keys -t "$MIDDLE_SESSION" Enter
 }
 
 wait_for_done() {
