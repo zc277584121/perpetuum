@@ -5,6 +5,98 @@ to use perpetuum. Read it if you're modifying the skill, designing a
 new example, or trying to understand why certain decisions are
 non-negotiable.
 
+## Three core problems, three core solutions
+
+This is the framing the whole project is organized around. Every
+mechanism elsewhere in this doc either implements one of these three
+solutions or supports one of them. (The README has the same framing
+with ASCII diagrams; this section is the prose version for people
+reading the design docs directly.)
+
+### Problem 1 — Vague goal, wide operating space → drift
+
+`/goal` and Ralph-style loops take whatever sentence the user typed
+as the goal and give the agent unlimited interpretive freedom. With
+nothing actively pulling the agent back to the main thread, or
+vetting its mid-run output, it wanders off-target.
+
+**perpetuum's answer (a two-part mechanism in Layer 2):**
+
+- A **suitability gate** at setup forces a narrow, judgeable goal
+  up front. Vague tasks get reshaped or rejected before init.
+- Every cycle, Layer 2 runs two prompts: `prompts/1_explore.md`
+  re-checks direction (where should we go next, what's still
+  pending, are we drifting?) and `prompts/2_execute.md` dispatches
+  Layer 1 work and judges the result before it can become a commit.
+  The plan-then-judge cycle is what stops "fake progress" from
+  accumulating.
+
+This is the discriminator/generator separation from GANs, but
+applied at the loop level rather than at the model level.
+
+### Problem 2 — No continuation mechanism → one short run and done
+
+`/goal` is single-session. Even "infinite loop" variants are blindly
+time-triggered, no concept of event or condition. But real "do more
+of this" work — find more bugs, fit a metric tighter, watch for new
+PRs — needs the loop to span sessions, restarts, and different kinds
+of trigger.
+
+**perpetuum's answer (Layer 3):**
+
+Layer 3 (`trigger.sh`) abstracts triggers into three families:
+
+- `schedule` — every N minutes, run a cycle
+- `conditional` — poll an external state (`gh pr list`, file watch,
+  log alert) and only run when something changed
+- `webhook` — react to event-driven input
+
+All three feed the same Layer 2/Layer 1 stack. Arbitrarily many
+cycles can then be stitched together on the time axis — across
+sessions, machine reboots, days, weeks.
+
+### Problem 3 — Human-in-the-loop is a wall → ambiguity freezes everything
+
+Traditional loops have no way to keep going when they hit something
+they can't decide alone. They guess wrong or stop and wait — and if
+the user isn't at the terminal, "wait" means dead.
+
+**perpetuum's answer (three async channels):**
+
+- `escalations.md` — agent writes ambiguous decisions with A/B/C
+  options to a queue. The user fills answers in when convenient.
+  The loop never blocks; it notes "this one's escalated, moving on
+  to the next" and continues.
+- `inbox.md` — user pushes instructions in (SKIP, PRIORITIZE,
+  DIRECTION, etc.) whenever they want. The next cycle's explore
+  phase reads and applies them.
+- **Layer 4** — the host coding agent the user is talking to. It
+  monitors all the files, translates natural-language requests into
+  file operations, and coordinates. The user doesn't have to know
+  the file layout to drive the loop.
+
+Git history is the safety net for any single step that goes wrong:
+rejected outputs never enter history, off-track commits can be
+`git reset` without losing previous progress.
+
+### How the three solutions compose
+
+```
+narrow goal + Layer 2 plan/judge   ×   Layer 3 trigger abstraction   ×   async escalation + inbox + git
+       (P1 solved)                          (P2 solved)                       (P3 solved)
+       
+       = actually perpetual
+```
+
+Remove any one of the three and the loop fails in a specific way:
+
+- Without P1's solution, even with infinite triggers and async human
+  support, the agent drifts and produces garbage forever.
+- Without P2's solution, you have one safe high-quality run that
+  ends. Not "perpetual".
+- Without P3's solution, the first ambiguity freezes the loop and
+  needs a human in the loop synchronously.
+
 ## The core invariant
 
 **Every accepted finding becomes a local git commit.** Without this,
@@ -24,18 +116,23 @@ Everything else in perpetuum exists to support this invariant safely:
 - The pause / stop signals let the user inspect state without
   damaging the ratchet history
 
-## Eight ideas, combined
+## Eight supporting ideas
+
+The three solutions above are perpetuum's reason to exist. The
+implementation borrows from eight smaller, already-named ideas. None
+is original to perpetuum; what's original is how they're combined to
+make the three solutions practical to run.
 
 | # | Idea | Where it shows up in perpetuum |
 |---|---|---|
-| 1 | Discriminator / Generator separation (GANs) | Layer 2 judges, Layer 1 generates. They never share context. |
-| 2 | Monotonic ratchet | Every Done item is a commit. plan.md `[x]` is append-only by convention. |
-| 3 | Three-layer architecture (stupid → smart → stupid) | trigger.sh is dumb, middle is smart, inner is dumb. Smartness concentrated in the middle. |
-| 4 | Exploration vs Exploitation prompt split | `prompts/1_explore.md` plans, `prompts/2_execute.md` does. Cannot be merged without losing this property. |
-| 5 | File-based persistent memory | plan.md + inbox.md + escalations.md + git log. No vector DB, no embeddings. |
-| 6 | Asynchronous human escalation | escalations.md never blocks the loop. New cycles still run. |
-| 7 | Trigger abstraction | schedule / conditional / webhook are all valid Layer 3 implementations. Same Layer 2/1. |
-| 8 | File-as-contract | Who can edit which file is a convention, not enforcement. Cleaner than role-based access. |
+| 1 | Discriminator / Generator separation (GANs) | Layer 2 judges, Layer 1 generates. They never share context. **Implements P1's judge half.** |
+| 2 | Monotonic ratchet | Every Done item is a commit. plan.md `[x]` is append-only by convention. **Safety net for P3 (off-track steps undone silently).** |
+| 3 | Three-layer architecture (stupid → smart → stupid) | trigger.sh is dumb, middle is smart, inner is dumb. **The structural shape of P1 + P3 together.** |
+| 4 | Exploration vs Exploitation prompt split | `prompts/1_explore.md` plans, `prompts/2_execute.md` does. **Implements P1's plan half.** |
+| 5 | File-based persistent memory | plan.md + inbox.md + escalations.md + git log. No vector DB, no embeddings. **Enables P2 (state survives triggered cycles) and P3 (async channels are just files).** |
+| 6 | Asynchronous human escalation | escalations.md never blocks the loop. New cycles still run. **Implements P3's escalations channel.** |
+| 7 | Trigger abstraction | schedule / conditional / webhook are all valid Layer 3 implementations. Same Layer 2/1. **Implements P2.** |
+| 8 | File-as-contract | Who can edit which file is a convention, not enforcement. Cleaner than role-based access. **Makes P3's shared-file channels safe in practice.** |
 
 Removing any one of these breaks something:
 
