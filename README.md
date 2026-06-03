@@ -174,10 +174,13 @@ the answers to "what's the technique behind this?":
   see history. Neither can fake a result the other would accept. This
   is what stops the self-certifying problem you see in `/goal` and Ralph
   Loop, where the same agent both produces and judges.
-- **Monotonic ratchet** via local `git commit`. Every accepted finding
-  is a commit; every reject is a `git reset`. The branch is therefore
-  monotonically improving — borrowed from Karpathy's AutoResearch
-  pattern, but without requiring a scalar metric.
+- **Monotonic ratchet** via local `git commit`. The middle agent
+  judges each Layer-1 proposal *before* it becomes a commit — rejected
+  ones simply never enter history. Accepted ones land as a `git commit`,
+  giving the branch a clean, append-only progress log that doubles as
+  the durability mechanism across sessions. (Same family of idea as
+  Karpathy's AutoResearch ratchet, with the judge slightly earlier in
+  the loop.)
 - **Exploration vs exploitation as separate prompts.** Phase 1
   (`prompts/1_explore.md`) is divergent — list new dimensions, sample broadly,
   populate the backlog. Phase 2 (`prompts/2_execute.md`) is convergent — work
@@ -188,11 +191,6 @@ the answers to "what's the technique behind this?":
   what's been tried, what worked, what was escalated. The middle agent
   re-reads it every cycle, so context rot can't accumulate and a session
   can be paused, killed, or relaunched without losing state.
-- **Layer 3 is intentionally dumb.** It only paces and signals. All
-  decisions live in Layer 2's two prompt files, which you can edit at
-  any time without restarting anything. Trigger configuration is
-  per-task (not per-skill), so a task can change its own heartbeat
-  without touching the rest of the system.
 
 Layer 4 is optional — you can interact with the state files directly.
 The host agent is just a friendlier UI on top of the same file
@@ -394,9 +392,9 @@ the human's input arrives whenever it arrives.
 
    cycle 1 ──►──► cycle 2 ──►──► cycle 3 ──►──► cycle N ──►──► ...
       │              │              │
-      │ ambiguous     │ ambiguous     │ went off-track
-      │ → write out   │ → write out   │ → git reset (ratchet,
-      ▼              ▼              ▼   never enters main branch)
+      │ ambiguous     │ ambiguous     │ judge rejects Layer 1's
+      │ → write out   │ → write out   │   proposal → no commit
+      ▼              ▼              ▼   ever happens for it
    ╔════════════════════════════════════════════════╗
    ║  escalations.md   (agent writes; human answers ║
    ║                    when convenient)             ║
@@ -433,7 +431,7 @@ the human's input arrives whenever it arrives.
    └────────────────────────────────────────────────────────────────┘
 
        Key:  ambiguity → escalations (loop keeps going)
-             off-track step → git reset (ratchet undoes silently)
+             off-track step → judge rejects it; no commit happens
              human-not-there → that's fine, async by design
 ```
 
@@ -470,8 +468,9 @@ not themselves the point.
 
 1. **Discriminator / Generator separation** (from GANs) — Layer 2
    judges, Layer 1 generates, they never share context.
-2. **Monotonic ratchet** — every Done becomes a commit; every reject
-   never enters history. `git reset` is the rollback.
+2. **Monotonic ratchet** — every Done becomes a commit; rejected
+   proposals never become commits in the first place, so the branch
+   stays append-only.
 3. **Three-layer architecture** (stupid → smart → stupid) — heartbeat
    at the top, intelligence in the middle, focused execution at the
    bottom.

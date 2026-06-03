@@ -75,9 +75,10 @@ the user isn't at the terminal, "wait" means dead.
   file operations, and coordinates. The user doesn't have to know
   the file layout to drive the loop.
 
-Git history is the safety net for any single step that goes wrong:
-rejected outputs never enter history, off-track commits can be
-`git reset` without losing previous progress.
+Git history doubles as the durability + audit log: the middle agent
+judges each Layer-1 proposal before it becomes a commit, so rejected
+outputs never enter history in the first place. The branch stays
+clean and append-only.
 
 ### How the three solutions compose
 

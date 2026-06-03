@@ -79,11 +79,13 @@ or escalates.
 Each mechanism is summarized here; for the full procedure see the
 linked reference.
 
-- **Ratchet (monotonic progress).** Every accepted finding becomes a
-  local `git commit`; every reject is a `git reset`. The branch is
-  monotonically improving — borrowed from Karpathy's AutoResearch
-  pattern, but for tasks without a scalar metric. Details in
-  `references/design.md`.
+- **Ratchet (monotonic progress).** The middle agent judges each
+  Layer-1 proposal *before* committing; rejected proposals never
+  become commits. Accepted ones land as a local `git commit`, giving
+  the branch a clean append-only log that doubles as the durability
+  mechanism across sessions. Same family of idea as Karpathy's
+  AutoResearch ratchet, with the judge slightly earlier in the loop.
+  Details in `references/design.md`.
 
 - **Exploration vs exploitation split.** Two prompts per cycle.
   `prompts/1_explore.md` is divergent (list dimensions, sample broadly,
