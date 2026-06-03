@@ -1,47 +1,41 @@
 # perpetuum ♾️
 
+> A perpetual-motion engine for coding agents — production-grade,
+> not a thought experiment.
+
 ## 🛑 Why your `/goal` runs go nowhere
 
-You've probably tried `/goal` in Claude Code or Codex. It runs for a
-few minutes, decides "task complete", and stops. **That's not perpetual.
-That's just "unattended for 20 minutes."**
+You've probably tried `/goal` in Claude Code or Codex, or wired up a
+Ralph Loop. What happens, every time:
 
-`perpetuum` is what lets your coding agent actually run **while you
-sleep, while you're at lunch, while you're on vacation.** It keeps
-producing work for hours and days, asks for your input asynchronously
-when it needs you, and never decides on its own that the job is done.
+- either it runs for a few minutes, decides "task complete", and stops —
+- or it stutters, hangs, gets stuck waiting for you on every ambiguous
+  decision.
+
+That's not perpetual. That's just "unattended for 20 minutes."
+
+`perpetuum` is what lets your coding agent **actually keep running —
+truly, perpetually, until you tell it to stop.** It works while you
+sleep, while you're at lunch, while you're on vacation. It needs no
+synchronous human attention.
 
 Think of it as letting your coding agent moonlight as your night-shift
 coworker. You hand it a project, go to bed, come back to a stack of
 commits and a short list of "hey, you need to decide this one" notes.
+**Day after day, indefinitely** — never interrupted, never blocking on
+your reply. Like a steady, diligent collaborator who just keeps working.
 
-The specific things that go wrong with `/goal` — and how `perpetuum`
-fixes each:
+The specific things that go wrong with `/goal` and Ralph-style loops —
+and how `perpetuum` fixes each:
 
 | What you've seen | Why it happens | What `perpetuum` does |
 |---|---|---|
 | ⏱️ Runs 20 min and stops — you wanted overnight | Single-session loop, no real continuation beyond one task | Triggers (schedule / conditional / webhook) keep the loop alive across cycles, restarts, days |
+| 🪨 Stutters, gets stuck waiting for you on every ambiguity | Human-in-loop is a hard wall — no progress until you reply | Async `escalations.md` — loop keeps going on everything else while you answer offline |
 | 🤡 Agent self-certifies "done" | Same context produces and judges | Three layers: middle judges, fresh inner via `cc-use` produces — they never share context |
 | 🐛 Silent regression | No ratchet to roll back bad steps | Every accepted finding becomes a local `git commit`; rejects never enter history |
 | 🧠 Context rot after a few hours | All state lives in conversation | State lives in markdown files; middle re-reads them every cycle |
-| 🚧 Human-in-loop is a hard wall | Ambiguity → stops and waits for you | Async `escalations.md` — loop keeps going on everything else while you answer offline |
 | 🔀 Plan and execute entangled | One prompt does both | Two prompts per cycle (`1_explore.md`, `2_execute.md`); drop `3_reflect.md` in to add reflection |
-
-## 🚀 Quick Start
-
-```bash
-npx skills add zc277584121/perpetuum --all -g
-```
-
-Then in any project, ask your coding agent:
-
-> Use perpetuum to run continuous adversarial testing on this project
-> for the next couple of days.
-
-The skill walks you through a suitability gate (is this actually a task
-that benefits from a persistent loop?), picks the closest example,
-customizes prompts and trigger for your case, confirms cost/cadence
-with you, then launches.
 
 ## 📦 Installation
 
@@ -78,59 +72,81 @@ Other supported agents include `windsurf`, `github-copilot`, `cline`,
 
 You also need `tmux` and `git` available locally.
 
+Then in any project, ask your coding agent:
+
+> Use perpetuum to run continuous adversarial testing on this project
+> for the next couple of days.
+
+The skill walks you through a suitability gate (is this actually a task
+that benefits from a persistent loop?), picks the closest example,
+customizes prompts and trigger for your case, confirms cost/cadence
+with you, then launches.
+
 ## 🏗️ Architecture
 
 ```
-            ┌────────────────────────────────────────────────────────┐
-            │ Layer 4   you + host agent (Claude Code / Codex TUI)   │
-            │           you describe the task; agent sets up,        │
-            │           monitors, relays your nudges (optional)      │
-            └──────────────────────┬─────────────────────────────────┘
-                                   │ spawns
-                                   ▼
-            ┌────────────────────────────────────────────────────────┐
-            │ Layer 3   trigger.sh — the dumb heartbeat              │
-            │           paste 1_explore.md → wait → paste 2_execute  │
-            │           → wait → sleep. Loop until done or stopped.  │
-            │           triggers: schedule / conditional / webhook   │
-            └──────────────────────┬─────────────────────────────────┘
-                                   │ pastes prompt into tmux
-                                   ▼
-            ┌────────────────────────────────────────────────────────┐
-            │ Layer 2   middle agent — persistent CC TUI in tmux     │
-            │   phase 1 explore: read plan/inbox → append new items  │
-            │   phase 2 execute: dispatch to Layer 1 → judge result  │
-            │                    → commit OR escalate to human       │
-            └──────────────────────┬─────────────────────────────────┘
-                                   │ cc-use delegate
-                                   ▼
-            ┌────────────────────────────────────────────────────────┐
-            │ Layer 1   inner agent — fresh CC, zero priors          │
-            │           runs the actual work, reports observations   │
-            │           never sees previous cycles → can't rubber-   │
-            │           stamp known behavior                          │
-            └────────────────────────────────────────────────────────┘
+        ┌──────────────────────────────────────────────────────────────┐
+        │ Layer 4   you + host coding agent (Claude Code / Codex)      │
+        │   you describe the task in natural language                  │
+        │   agent sets up files, monitors, relays nudges (optional)    │
+        └──────────────────────────────┬───────────────────────────────┘
+                                       │ launches
+                                       ▼
+        ┌──────────────────────────────────────────────────────────────┐
+        │ Layer 3   trigger.sh — the dumb heartbeat                    │
+        │   loop until MAX_ITER or .stop_after_current:                │
+        │     check .paused signal                                     │
+        │     paste 1_explore.md → wait for done flag                  │
+        │     paste 2_execute.md → wait for done flag                  │
+        │     sleep SLEEP_BETWEEN_CYCLES                               │
+        │   trigger modes:  schedule  |  conditional  |  webhook       │
+        └──────────────────────────────┬───────────────────────────────┘
+                                       │ pastes prompt into tmux
+                                       ▼
+        ┌──────────────────────────────────────────────────────────────┐
+        │ Layer 2   middle agent — persistent CC TUI inside tmux       │
+        │                                                              │
+        │   ┌─ phase 1: EXPLORE ──────────────────────────────────┐    │
+        │   │ read plan.md, inbox.md, escalations.md ## Resolved │    │
+        │   │ list testing dimensions, sample new items           │    │
+        │   │ append to plan.md ## Pending                        │    │
+        │   └────────────────────────────────────────────────────┘    │
+        │                                                              │
+        │   ┌─ phase 2: EXECUTE ──────────────────────────────────┐    │
+        │   │ for each Pending item:                                │    │
+        │   │   cc-use delegate ──► Layer 1                         │    │
+        │   │   judge inner agent's report:                          │    │
+        │   │      PASS  → record to plan.md ## Done                 │    │
+        │   │      BUG   → fix + commit (ratchet ↑)                  │    │
+        │   │      AMBIG → escalations.md ## Open (async, no block) │    │
+        │   └────────────────────────────────────────────────────┘    │
+        └──────────────────────────────┬───────────────────────────────┘
+                                       │ cc-use delegate (per item)
+                                       ▼
+        ┌──────────────────────────────────────────────────────────────┐
+        │ Layer 1   inner agent — fresh CC, zero priors                │
+        │   runs the actual operation: CLI command, code read, edit.  │
+        │   returns observations to Layer 2. Has no memory of         │
+        │   previous cycles → cannot rubber-stamp known behavior.     │
+        └──────────────────────────────────────────────────────────────┘
 ```
 
-Everything is files. State, memory, signals, history, human input —
-markdown + git + tmux + a couple of `touch` flags. No vector DB,
-no framework lock-in, no daemon, no agent SDK.
+Two design choices in this layout do the most work:
 
-A task on a project looks like:
+- **Layer 2 judges, Layer 1 produces, and they share no context.**
+  This is the mechanism that prevents self-certifying. Layer 2 sees
+  the whole history but can't run the work itself; Layer 1 runs the
+  work but can't see history. Neither can fake a result the other
+  would accept.
+- **Layer 3 is intentionally dumb.** It only paces and signals. All
+  decisions live in Layer 2's two prompt files, which you can edit
+  at any time without restarting anything. The trigger is per-task,
+  not per-skill, so a task can change its own heartbeat without
+  touching the rest of the system.
 
-```
-.perpetuum/<task>/
-├── plan.md              agent writes — what's done / pending
-├── inbox.md             YOU write    — nudges, priorities, skips
-├── escalations.md       agent ↔ you  — ambiguous decisions, A/B/C
-├── trigger.sh           per-task     — heartbeat config
-├── 1_explore.md         prompt 1     — planning
-├── 2_execute.md         prompt 2     — dispatching + judging
-├── _meta.md             set once     — branch / worktree metadata
-├── .paused              signal       — pause the loop
-├── .stop_after_current  signal       — graceful stop
-└── trigger.log
-```
+Layer 4 is optional — you can interact with the state files directly.
+The host agent is just a friendlier UI on top of the same file
+contracts.
 
 ## 🎮 Using It
 
@@ -273,8 +289,8 @@ To update a project-level install, re-run the `npx skills add` command.
 
 `perpetuum` requires the [`cc-use`](https://github.com/zc277584121/cc-use)
 skill — Layer 2 uses it to dispatch every unit of work to a
-fresh-context inner agent. The skill checks at init time and prompts you
-if missing:
+fresh-context inner agent. The skill checks at init time and prompts
+you if missing:
 
 ```bash
 npx skills add zc277584121/cc-use --all -g
