@@ -152,6 +152,53 @@ fed to Layer 2 in lexical order, one per cycle phase. Default is 2
 (`1_explore.md`, `2_execute.md`); add `3_reflect.md` for a reflection
 phase, `1.5_check.md` to insert a step between, etc.
 
+### What the state files actually look like
+
+Use these as templates when you generate or judge file content. Match
+the structure; render the content in the user's language per the
+language rule below.
+
+`plan.md` — agent-maintained:
+
+```markdown
+## Pending
+- [ ] [auth] test expired token refresh
+- [ ] [parse] malformed XML input
+
+## Done
+- [x] (cycle 3) [auth] login flow
+  - operation: cli login --user x
+  - observed: 200 + valid JWT
+  - status: PASS
+- [x] (cycle 5) [parse] xss in error envelope
+  - status: [FIXED] commit:abc1234
+```
+
+`inbox.md` — user writes; agent reads and absorbs every cycle:
+
+```markdown
+## Pending
+- SKIP: postgres backend, not shipping
+- PRIORITIZE: PR #123 first
+- NOTE: I'm OOO Friday, no urgent escalations
+
+## Processed
+- (cycle 6) SKIP applied — removed 4 postgres items from plan.md
+```
+
+`escalations.md` — agent writes `## Open` items; user fills
+`## Resolved`:
+
+```markdown
+## Open
+### (cycle 4) off-by-one in --range flag
+A: 1-based inclusive (matches head/tail/sed)
+B: 0-based half-open (matches array semantics in most languages)
+C: leave both, document the discrepancy
+
+## Resolved
+```
+
 ## Setting up a new task
 
 Setup is the longest interaction this skill has with the user. Don't
@@ -305,19 +352,25 @@ to know how to drive.
     `inbox.md`
   - `_meta.md` — static after setup
 
-- **Talk to you or edit files — both work.** They can say "perpetuum,
-  pause the testing task" / "skip postgres" / "PR #123 is urgent" to
-  the host agent and you translate to file operations; or they can
-  edit files directly in their editor. Make this explicit; some users
-  prefer one, some the other.
+- **Talk to you or edit files — both work.** They can say things in
+  natural language to the host agent and you translate to file
+  operations; or they can edit files directly in their editor. Make
+  both paths explicit; some users prefer one, some the other.
 
-- **Pause / resume / stop / kill.** File signals:
-  ```
-  touch .paused                  # pause after current cycle
-  rm .paused                     # resume
-  touch .stop_after_current      # graceful stop
-  pkill -f trigger.sh ; tmux kill-session -t middle-<task>   # hard
-  ```
+  Translation table for common natural-language requests:
+
+  | User says (any language) | You do |
+  |---|---|
+  | "pause" / "stop for now" / "暂停" | `touch .perpetuum/<task>/.paused` |
+  | "resume" / "keep going" / "继续" | `rm .perpetuum/<task>/.paused` |
+  | "stop gracefully" / "finish this cycle and stop" | `touch .perpetuum/<task>/.stop_after_current` |
+  | "kill it" / "强制停" | `pkill -f trigger.sh ; tmux kill-session -t middle-<task>` |
+  | "skip X" / "don't bother with X" | append `SKIP: X` to `inbox.md` `## Pending` |
+  | "prioritize Y" / "Y first" | append `PRIORITIZE: Y` to `inbox.md` |
+  | "add a test/scan for Z" | append `ADD: Z` to `inbox.md` |
+  | "change direction to W" | append `DIRECTION: W` to `inbox.md` |
+  | "for question X, pick option A" | edit the matching `escalations.md` Open item, add the answer, move to `## Resolved` |
+  | "what's the status?" / "what's it doing?" | tail `trigger.log` + summarize `plan.md` Pending/Done counts + list any unresolved escalations |
 
 - **Reset the cost expectation.** Reiterate what `SLEEP_BETWEEN_CYCLES`
   and `MAX_ITER` are set to and what that implies for spend over the
