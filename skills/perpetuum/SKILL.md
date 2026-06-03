@@ -357,14 +357,16 @@ to know how to drive.
   operations; or they can edit files directly in their editor. Make
   both paths explicit; some users prefer one, some the other.
 
-  Translation table for common natural-language requests:
+  Translation table for common natural-language requests (English
+  phrasings shown — map equivalent intent in any user language to the
+  same operation):
 
-  | User says (any language) | You do |
+  | User intent | You do |
   |---|---|
-  | "pause" / "stop for now" / "暂停" | `touch .perpetuum/<task>/.paused` |
-  | "resume" / "keep going" / "继续" | `rm .perpetuum/<task>/.paused` |
+  | "pause" / "stop for now" / "hold on" | `touch .perpetuum/<task>/.paused` |
+  | "resume" / "keep going" / "start again" | `rm .perpetuum/<task>/.paused` |
   | "stop gracefully" / "finish this cycle and stop" | `touch .perpetuum/<task>/.stop_after_current` |
-  | "kill it" / "强制停" | `pkill -f trigger.sh ; tmux kill-session -t middle-<task>` |
+  | "kill it" / "force stop" / "just stop" | `pkill -f trigger.sh ; tmux kill-session -t middle-<task>` |
   | "skip X" / "don't bother with X" | append `SKIP: X` to `inbox.md` `## Pending` |
   | "prioritize Y" / "Y first" | append `PRIORITIZE: Y` to `inbox.md` |
   | "add a test/scan for Z" | append `ADD: Z` to `inbox.md` |
