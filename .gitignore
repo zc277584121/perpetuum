@@ -1,0 +1,12 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/
+
+# perpetuum runtime state (in case anyone tries the skill from inside this repo)
+.perpetuum/
