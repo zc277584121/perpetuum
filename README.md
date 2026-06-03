@@ -32,12 +32,12 @@ uses to fix each:
    and give the agent unlimited interpretive freedom. With nothing
    actively pulling it back to the main thread or vetting its mid-run
    decisions, it wanders.
-   **→ perpetuum** forces a narrow, judgeable goal up front (via a
-   suitability gate at setup), then runs a **two-prompt cycle every
-   round** — one prompt re-checks the direction the agent is heading,
-   the other dispatches the actual work and judges the result before
-   it can become a commit. The plan-then-judge separation is what
-   stops "fake progress" from accumulating silently.
+   **→ perpetuum** requires the goal to be narrow and judgeable
+   before it starts, and in every round it explicitly separates
+   "where should we head next?" from "do this concrete piece of
+   work and check the result". Because the part that proposes the
+   work and the part that accepts it stay distinct, drift gets
+   caught and "fake progress" can't quietly accumulate.
 
 2. **No continuation mechanism → one short run and you're done.**
    `/goal` is single-session. Even the "infinite loop" variants are
@@ -45,11 +45,12 @@ uses to fix each:
    real "do more of this" work — find more bugs, fit a metric
    tighter, watch for new PRs — needs the loop to span sessions,
    restarts, and different kinds of trigger.
-   **→ perpetuum** abstracts triggers into three kinds —
-   `schedule` (every N minutes), `conditional` (poll an external
-   state), `webhook` (event-driven) — and stitches arbitrarily many
-   cycles together on the time axis. The cycles persist across
-   sessions, restarts, days.
+   **→ perpetuum** gives the loop a real continuation mechanism:
+   it can run on a fixed schedule, or wake up when something
+   outside changes (a new PR appears, a file is touched, an alert
+   fires), or react to incoming events. The same loop persists
+   across sessions, restarts, days — pick whatever trigger matches
+   the work.
 
 3. **Human-in-the-loop is a wall, not a sluice → the first ambiguity
    freezes everything.** Traditional loops have no way to keep going
