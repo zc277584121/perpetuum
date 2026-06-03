@@ -81,50 +81,50 @@ with you, then launches.
 ## 🏗️ Architecture
 
 ```
-        ┌──────────────────────────────────────────────────────────────┐
-        │ Layer 4   you + host coding agent (Claude Code / Codex)      │
-        │   you describe the task in natural language                  │
-        │   agent sets up files, monitors, relays nudges (optional)    │
-        └──────────────────────────────┬───────────────────────────────┘
-                                       │ launches
-                                       ▼
-        ┌──────────────────────────────────────────────────────────────┐
-        │ Layer 3   trigger.sh — the dumb heartbeat                    │
-        │   loop until MAX_ITER or .stop_after_current:                │
-        │     check .paused signal                                     │
-        │     paste 1_explore.md → wait for done flag                  │
-        │     paste 2_execute.md → wait for done flag                  │
-        │     sleep SLEEP_BETWEEN_CYCLES                               │
-        │   trigger modes:  schedule  |  conditional  |  webhook       │
-        └──────────────────────────────┬───────────────────────────────┘
-                                       │ pastes prompt into tmux
-                                       ▼
-        ┌──────────────────────────────────────────────────────────────┐
-        │ Layer 2   middle agent — persistent CC TUI inside tmux       │
-        │                                                              │
-        │   ┌─ phase 1: EXPLORE ──────────────────────────────────┐    │
-        │   │ read plan.md, inbox.md, escalations.md ## Resolved │    │
-        │   │ list testing dimensions, sample new items           │    │
-        │   │ append to plan.md ## Pending                        │    │
-        │   └────────────────────────────────────────────────────┘    │
-        │                                                              │
-        │   ┌─ phase 2: EXECUTE ──────────────────────────────────┐    │
-        │   │ for each Pending item:                                │    │
-        │   │   cc-use delegate ──► Layer 1                         │    │
-        │   │   judge inner agent's report:                          │    │
-        │   │      PASS  → record to plan.md ## Done                 │    │
-        │   │      BUG   → fix + commit (ratchet ↑)                  │    │
-        │   │      AMBIG → escalations.md ## Open (async, no block) │    │
-        │   └────────────────────────────────────────────────────┘    │
-        └──────────────────────────────┬───────────────────────────────┘
-                                       │ cc-use delegate (per item)
-                                       ▼
-        ┌──────────────────────────────────────────────────────────────┐
-        │ Layer 1   inner agent — fresh CC, zero priors                │
-        │   runs the actual operation: CLI command, code read, edit.  │
-        │   returns observations to Layer 2. Has no memory of         │
-        │   previous cycles → cannot rubber-stamp known behavior.     │
-        └──────────────────────────────────────────────────────────────┘
+        ┌─────────────────────────────────────────────────────────────────┐
+        │ 👤  Layer 4   you + host coding agent (Claude Code / Codex)     │
+        │     you describe the task in natural language                   │
+        │     agent sets up files, monitors, relays nudges (optional)     │
+        └────────────────────────────────┬────────────────────────────────┘
+                                         │ launches
+                                         ▼
+        ┌─────────────────────────────────────────────────────────────────┐
+        │ ⏰  Layer 3   trigger.sh — the dumb heartbeat                   │
+        │     loop until MAX_ITER or .stop_after_current:                 │
+        │       check .paused signal                                      │
+        │       paste 1_explore.md → wait for done flag                   │
+        │       paste 2_execute.md → wait for done flag                   │
+        │       sleep SLEEP_BETWEEN_CYCLES                                │
+        │     trigger modes:  schedule  |  conditional  |  webhook        │
+        └────────────────────────────────┬────────────────────────────────┘
+                                         │ pastes prompt into tmux
+                                         ▼
+        ┌─────────────────────────────────────────────────────────────────┐
+        │ 🧠  Layer 2   middle agent — persistent CC TUI inside tmux      │
+        │                                                                 │
+        │     ┌─ 🔍 phase 1: EXPLORE ─────────────────────────────────┐   │
+        │     │ read plan.md, inbox.md, escalations.md ## Resolved    │   │
+        │     │ list testing dimensions, sample new items             │   │
+        │     │ append to plan.md ## Pending                          │   │
+        │     └──────────────────────────────────────────────────────┘   │
+        │                                                                 │
+        │     ┌─ ⚖️  phase 2: EXECUTE ────────────────────────────────┐   │
+        │     │ for each Pending item:                                │   │
+        │     │   cc-use delegate ──► Layer 1                         │   │
+        │     │   judge inner agent's report:                         │   │
+        │     │      ✅ PASS  → record to plan.md ## Done             │   │
+        │     │      🐛 BUG   → fix + commit (ratchet ↑)              │   │
+        │     │      ❓ AMBIG → escalations.md ## Open (async)        │   │
+        │     └──────────────────────────────────────────────────────┘   │
+        └────────────────────────────────┬────────────────────────────────┘
+                                         │ cc-use delegate (per item)
+                                         ▼
+        ┌─────────────────────────────────────────────────────────────────┐
+        │ 🤖  Layer 1   inner agent — fresh CC, zero priors               │
+        │     runs the actual operation: CLI command, code read, edit.    │
+        │     returns observations to Layer 2. Has no memory of           │
+        │     previous cycles → cannot rubber-stamp known behavior.       │
+        └─────────────────────────────────────────────────────────────────┘
 ```
 
 Two design choices in this layout do the most work:
