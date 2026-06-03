@@ -8,6 +8,16 @@ TASK_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$TASK_DIR/../.." && pwd)"
 MIDDLE_SESSION="middle-obsv-$(basename "$PROJECT_ROOT")"
 
+# Inner-agent command for Layer 2 (the persistent agent TUI in tmux).
+# Default: Claude Code with permissions bypassed.
+# For Codex CLI users, override before running, e.g.:
+#   AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox" .perpetuum/<task>/trigger.sh
+# Or (safer, sandboxed workspace writes only):
+#   AGENT_CMD="codex --full-auto" .perpetuum/<task>/trigger.sh
+# Other coding-CLI agents (Cursor, Windsurf, etc.) work too — set AGENT_CMD
+# to whatever command starts that agent in your terminal.
+AGENT_CMD="${AGENT_CMD:-claude --dangerously-skip-permissions}"
+
 MAX_ITER=20
 SLEEP_BETWEEN_CYCLES=120           # 2 min — see SKILL.md cost note before running
 WAIT_PHASE_TIMEOUT=14400           # 4h
@@ -21,7 +31,7 @@ log() { echo "[$(date '+%F %T')] $*" | tee -a "$LOG"; }
 ensure_middle_session() {
   if ! tmux has-session -t "$MIDDLE_SESSION" 2>/dev/null; then
     log "Starting $MIDDLE_SESSION (cwd=$PROJECT_ROOT)"
-    tmux new-session -d -s "$MIDDLE_SESSION" -c "$PROJECT_ROOT" 'claude --dangerously-skip-permissions'
+    tmux new-session -d -s "$MIDDLE_SESSION" -c "$PROJECT_ROOT" "$AGENT_CMD"
     sleep "$TUI_BOOT_WAIT"
   fi
 }

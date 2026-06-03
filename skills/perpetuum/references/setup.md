@@ -64,14 +64,22 @@ For each file in the chosen example:
      Use the example's structure (read history, plan new items, append
      to `plan.md`, write done-flag) but replace the task-specific
      instructions. Use the user's language.
-   - **`2_execute.md`** — adjust the dispatch logic. The `cc-use delegate
-     --project /abs/path --agent claude` line must use the **absolute
-     path** of the project (or the worktree path, if using worktrees).
+   - **`2_execute.md`** — adjust the dispatch logic. The
+     `cc-use delegate --project /abs/path --agent <agent-family>` line
+     must use the **absolute path** of the project (or the worktree
+     path, if using worktrees). `--agent` should match the host
+     coding-CLI agent the user is on (`claude`, `codex`, etc.).
    - **`trigger.sh`** — see `references/trigger.md`. Adjust:
+     - `AGENT_CMD` — defaults to Claude Code. For Codex CLI users,
+       suggest exporting `AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"`
+       (or the safer `codex --full-auto`) before running. The trigger
+       script picks it up from the environment, so no edit to the
+       file itself is needed for users on other agents — but mention
+       it explicitly so they know.
      - `MAX_ITER` (default 20, but reasonable for the task)
-     - `SLEEP_BETWEEN_CYCLES` (default 2400s = 40 min, or longer for
-       slow-changing tasks like daily monitoring)
-     - `WAIT_RESEARCH_TIMEOUT` / `WAIT_EXECUTE_TIMEOUT`
+     - `SLEEP_BETWEEN_CYCLES` (default 120s = 2 min — full throttle;
+       bump to 1800 or 3600 if the user has cost concerns)
+     - `WAIT_PHASE_TIMEOUT` / `SILENCE_THRESHOLD`
      - `MIDDLE_SESSION` name (e.g. `middle-adv-<project-short>`)
      - Trigger type (schedule, conditional, webhook)
    - **`plan.md`** — start empty with `## Pending` and `## Done`

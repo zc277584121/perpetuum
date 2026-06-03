@@ -26,6 +26,13 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TASK_DIR="$(cd "$(dirname "$0")" && pwd)"
 MIDDLE_SESSION="middle-<UNIQUE_TAG>"
 
+# Inner-agent command for Layer 2. Default = Claude Code, permissions
+# bypassed. Override for other coding-CLI agents:
+#   Codex CLI:  AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"
+#               or (safer) AGENT_CMD="codex --full-auto"
+#   Cursor, Windsurf, etc.: AGENT_CMD="whatever-starts-your-agent"
+AGENT_CMD="${AGENT_CMD:-claude --dangerously-skip-permissions}"
+
 MAX_ITER=20
 SLEEP_BETWEEN_CYCLES=120         # 2 min default — adjust based on cost tolerance
 WAIT_PHASE_TIMEOUT=3600        # per-prompt-phase total timeout
@@ -41,8 +48,7 @@ log()   { echo "[$(date '+%F %T')] $*" | tee -a "$LOG"; }
 ensure_middle_session() {
   if ! tmux has-session -t "$MIDDLE_SESSION" 2>/dev/null; then
     log "Starting $MIDDLE_SESSION (cwd=$PROJECT_ROOT)"
-    tmux new-session -d -s "$MIDDLE_SESSION" -c "$PROJECT_ROOT" \
-      'claude --dangerously-skip-permissions'
+    tmux new-session -d -s "$MIDDLE_SESSION" -c "$PROJECT_ROOT" "$AGENT_CMD"
     sleep "$TUI_BOOT_WAIT"
   fi
 }

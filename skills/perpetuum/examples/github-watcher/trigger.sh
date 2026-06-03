@@ -21,6 +21,16 @@ WATCH_QUERY="state:open"                         # what to consider "new activit
 #   WATCH_QUERY="state:open author:not-team"     # only outside contributions
 # ===============================
 
+# Inner-agent command for Layer 2 (the persistent agent TUI in tmux).
+# Default: Claude Code with permissions bypassed.
+# For Codex CLI users, override before running, e.g.:
+#   AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox" .perpetuum/<task>/trigger.sh
+# Or (safer, sandboxed workspace writes only):
+#   AGENT_CMD="codex --full-auto" .perpetuum/<task>/trigger.sh
+# Other coding-CLI agents (Cursor, Windsurf, etc.) work too — set AGENT_CMD
+# to whatever command starts that agent in your terminal.
+AGENT_CMD="${AGENT_CMD:-claude --dangerously-skip-permissions}"
+
 MAX_ITER=20                        # how many real cycles before we stop
 POLL_FREQ=3600                     # 1 hour between polls
 WAIT_PHASE_TIMEOUT=10800           # 3h per phase
@@ -38,7 +48,7 @@ ensure_middle_session() {
   if ! tmux has-session -t "$MIDDLE_SESSION" 2>/dev/null; then
     log "Starting $MIDDLE_SESSION (cwd=$PROJECT_ROOT)"
     tmux new-session -d -s "$MIDDLE_SESSION" -c "$PROJECT_ROOT" \
-      'claude --dangerously-skip-permissions'
+      "$AGENT_CMD"
     sleep "$TUI_BOOT_WAIT"
   fi
 }
