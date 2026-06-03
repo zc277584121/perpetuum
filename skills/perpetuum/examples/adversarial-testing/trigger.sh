@@ -69,6 +69,18 @@ send_prompt() {
   tmux paste-buffer -d -b pp_prompt -t "$MIDDLE_SESSION"
   rm -f "$tmp"
   sleep 0.5
+
+  # Codex-specific: dismiss the "Create a plan?" suggestion that Codex
+  # sometimes pops up when it detects a complex prompt
+  # (our explore phase prompt is exactly the kind of thing that triggers
+  # it). Claude Code doesn't have this popup and Escape may interfere
+  # with its TUI modals there, so we only send it for Codex. The branch
+  # is keyed on AGENT_CMD content (no hardcoded agent name in the loop)
+  # so future agents can opt in by matching their command string here.
+  case "$AGENT_CMD" in
+    codex*) tmux send-keys -t "$MIDDLE_SESSION" Escape; sleep 0.3 ;;
+  esac
+
   tmux send-keys -t "$MIDDLE_SESSION" Enter
   sleep 0.7
   tmux send-keys -t "$MIDDLE_SESSION" C-m
