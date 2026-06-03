@@ -41,10 +41,12 @@ uses to fix each:
 
 2. **No continuation mechanism → one short run and you're done.**
    `/goal` is single-session. Even the "infinite loop" variants are
-   blindly time-triggered, no concept of event or condition. But
-   real "do more of this" work — find more bugs, fit a metric
-   tighter, watch for new PRs — needs the loop to span sessions,
-   restarts, and different kinds of trigger.
+   blindly time-triggered, no concept of event or condition. But a
+   lot of "keep this going" work runs on events, not a clock —
+   watching for new PRs and triaging them as they arrive, reacting
+   to alerts when they fire, scanning whenever the codebase changes.
+   The loop needs to span sessions, restarts, and respond to
+   different kinds of trigger.
    **→ perpetuum** gives the loop a real continuation mechanism:
    it can run on a fixed schedule, or wake up when something
    outside changes (a new PR appears, a file is touched, an alert
