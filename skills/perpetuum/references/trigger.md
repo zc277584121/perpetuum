@@ -31,6 +31,9 @@ MIDDLE_SESSION="middle-<UNIQUE_TAG>"
 #   Codex CLI:  AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"
 #               or (safer) AGENT_CMD="codex --full-auto"
 #   Cursor, Windsurf, etc.: AGENT_CMD="whatever-starts-your-agent"
+# If Codex is in bypass mode, also export CC_USE_CODEX_FLAGS so cc-use
+# matches that mode when spawning Layer 1 (otherwise inner fails):
+#   export CC_USE_CODEX_FLAGS="--dangerously-bypass-approvals-and-sandbox"
 AGENT_CMD="${AGENT_CMD:-claude --dangerously-skip-permissions}"
 
 MAX_ITER=20
