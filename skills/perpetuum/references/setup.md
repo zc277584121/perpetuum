@@ -84,9 +84,9 @@ For each file in the chosen example:
      - Trigger type (schedule, conditional, webhook)
    - **`plan.md`** — start empty with `## Pending` and `## Done`
      sections.
-   - **`inbox.md`** — start with the `## 待消化` and `## 已消化` (or
+   - **`inbox.md`** — start with the `## Pending` and `## Processed` (or
      English equivalent) skeleton.
-   - **`escalations.md`** — start empty with `## 待处理` and `## 已解决`.
+   - **`escalations.md`** — start empty with `## Open` and `## Resolved`.
    - **`_meta.md`** — fill in:
 
 ```markdown
@@ -186,14 +186,14 @@ echo "When you're ready:  nohup .perpetuum/<task>/trigger.sh &"
 
 After cycle 1 the user often wants to tweak:
 
-- **Done-flag reminder is not strong enough** in `2_execute.md` →
+- **Done-flag reminder is not strong enough** in `prompts/2_execute.md` →
   raise the warning, put it at top *and* bottom of the prompt
 - **Prompt 1 produces too many TODOs / too few** → adjust the
   Cartesian-product/dimension language
 - **Layer 1 is "fixing" things you wanted reviewed first** → add a
-  list of "must escalate, do not auto-fix" categories to `2_execute.md`
+  list of "must escalate, do not auto-fix" categories to `prompts/2_execute.md`
 - **Layer 1 keeps trying the same blocked dimension** → add a "if
-  category X has been BLOCKED before, skip" instruction to `1_explore.md`
+  category X has been BLOCKED before, skip" instruction to `prompts/1_explore.md`
 
 These adjustments are normal. Make them with the user, don't push your
 own preferences.

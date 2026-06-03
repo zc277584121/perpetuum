@@ -60,14 +60,14 @@ the right command. Map liberally:
 
 | User says | You do |
 |---|---|
-| 暂停 / pause / stop for now / hold on | `touch .paused` |
-| 继续 / resume / keep going / start again | `rm .paused` |
-| 结束 / stop after this round / wrap up | `touch .stop_after_current` |
-| 强制停 / kill it / 杀掉 / 停掉 | `pkill -f trigger.sh; tmux kill-session -t middle-<task>` |
-| 重启 / start again / relaunch | `nohup .perpetuum/<task>/trigger.sh > /dev/null 2>&1 &` |
-| 现在是暂停的吗?/ 跑着吗? | check both: `ls .paused 2>/dev/null` and `pgrep -f trigger.sh` |
+| pause / stop for now / hold on | `touch .paused` |
+| resume / keep going / start again | `rm .paused` |
+| stop after this round / wrap up | `touch .stop_after_current` |
+| kill it / force stop | `pkill -f trigger.sh; tmux kill-session -t middle-<task>` |
+| start again / relaunch | `nohup .perpetuum/<task>/trigger.sh > /dev/null 2>&1 &` |
+| is it paused? / is it running? | check both: `ls .paused 2>/dev/null` and `pgrep -f trigger.sh` |
 
-For ambiguous wording ("停一下"), ask if they mean pause (resumable
+For ambiguous wording ("stop"), ask if they mean pause (resumable
 in seconds) or graceful stop (resumable later, but needs relaunch).
 
 ## How to confirm state

@@ -30,8 +30,8 @@ Use when the user has:
 | File | What you need to customize |
 |---|---|
 | `trigger.sh` | `MIDDLE_SESSION`, `MAX_ITER`, `SLEEP_BETWEEN_CYCLES`, possibly the timeouts |
-| `1_explore.md` | The "test dimensions examples" block — replace with this project's actual axes |
-| `2_execute.md` | The `--project` path (must be absolute), commit-style guidance if the project has conventions |
+| `prompts/1_explore.md` | The "test dimensions examples" block — replace with this project's actual axes |
+| `prompts/2_execute.md` | The `--project` path (must be absolute), commit-style guidance if the project has conventions |
 | `plan.md` | Leave empty, agent fills it |
 | `inbox.md` | Leave empty, user fills as they go |
 | `escalations.md` | Leave empty |
@@ -40,12 +40,12 @@ Use when the user has:
 ## Recommended adaptations
 
 - If the project's CLI has many subcommands, **list them explicitly** in
-  `1_explore.md`'s dimension hints — don't make the agent guess from
+  `prompts/1_explore.md`'s dimension hints — don't make the agent guess from
   the binary name.
 - If the project has known fragile areas, **list them in the agent's
-  context** via `1_explore.md` so it doesn't redundantly poke at them.
+  context** via `prompts/1_explore.md` so it doesn't redundantly poke at them.
 - If the user has strong opinions on what's a "real bug" vs "by design",
-  reflect that in `2_execute.md`'s classification guidance.
+  reflect that in `prompts/2_execute.md`'s classification guidance.
 
 ## Real-world reference
 

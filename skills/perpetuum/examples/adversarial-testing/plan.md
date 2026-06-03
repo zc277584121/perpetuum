@@ -6,13 +6,13 @@
 
 ## Pending
 
-<!-- New items appended by 1_explore.md each cycle. Format:
+<!-- New items appended by prompts/1_explore.md each cycle. Format:
 - [ ] [<dimension>/<sub>] short description
 -->
 
 ## Done
 
-<!-- Completed items moved here by 2_execute.md. Format:
+<!-- Completed items moved here by prompts/2_execute.md. Format:
 - [x] (cycle <id>) [<dimension>] short title
   - operation: ...
   - observed: ...

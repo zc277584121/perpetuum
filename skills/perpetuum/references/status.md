@@ -41,7 +41,7 @@ echo "Done:    $(grep -c '^- \[x\]' $TASK/plan.md)"
 echo "Esc'd:   $(grep -c '^- \[→\]' $TASK/plan.md)"
 
 # Escalations to show the human
-awk '/^## 待处理/,/^## 已解决/' $TASK/escalations.md
+awk '/^## Open/,/^## Resolved/' $TASK/escalations.md
 
 # Recent commits
 git -C <project-root> log --oneline -10

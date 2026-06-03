@@ -34,8 +34,8 @@ Use `style-distill` instead when:
 | File | Customize |
 |---|---|
 | `trigger.sh` | `MAX_ITER`, `SLEEP_BETWEEN_CYCLES` |
-| `1_explore.md` | Genre-specific quality criteria for *your* doc |
-| `2_execute.md` | Edit + judge logic; what counts as "better" |
+| `prompts/1_explore.md` | Genre-specific quality criteria for *your* doc |
+| `prompts/2_execute.md` | Edit + judge logic; what counts as "better" |
 | `draft.md` | Your starting document |
 | `style_notes.md` | (Optional) constraints — voice, audience, tone, hard rules |
 
@@ -58,7 +58,7 @@ This is the GAN-style discriminator-without-shared-context pattern.
 - Don't let the middle agent grade its own edits without the fresh
   inner judge. It will confirmation-bias toward keeping its work.
 - Don't keep editing the same paragraph cycle after cycle. Force
-  rotation — `1_explore.md` includes a "least recently touched"
+  rotation — `prompts/1_explore.md` includes a "least recently touched"
   heuristic.
 - Don't measure "length reduction" as quality. Sometimes shorter is
   better, sometimes not.

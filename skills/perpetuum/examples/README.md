@@ -26,8 +26,9 @@ directory needs:
 ├── README.md            describes the task shape and what to customize
 ├── _meta.md             template with placeholders
 ├── trigger.sh           customized for this task type
-├── 1_explore.md         prompt 1 customized for this task
-├── 2_execute.md         prompt 2 customized for this task
+├── prompts/
+│   ├── 1_explore.md     prompt 1 customized for this task
+│   └── 2_execute.md     prompt 2 customized for this task
 ├── plan.md              empty skeleton
 ├── inbox.md             empty skeleton
 └── escalations.md       empty skeleton
@@ -43,7 +44,7 @@ If you find a recurring task shape that doesn't fit existing examples,
 add one. The bar:
 
 - It must pass the suitability gate (`references/setup.md` describes it)
-- Its `1_explore.md` and `2_execute.md` should be 80%+ reusable for the
+- Its `prompts/1_explore.md` and `prompts/2_execute.md` should be 80%+ reusable for the
   task family, with only the domain-specific section needing customization
 - It must demonstrate at least one *distinct* idea (different trigger
   type, different oracle, different escalation pattern)

@@ -31,15 +31,15 @@ unless the user opted in).
 ```markdown
 # Inbox
 
-> Write what you want the agent to know/do under "## 待消化".
+> Write what you want the agent to know/do under "## Pending".
 > The agent reads this at the start of every cycle and migrates
-> processed items to "## 已消化".
+> processed items to "## Processed".
 
-## 待消化
+## Pending
 
 - (your items here)
 
-## 已消化
+## Processed
 
 - (agent moves processed items here, with a brief note)
 ```
@@ -61,21 +61,20 @@ work too:
 ### Example
 
 ```markdown
-## 待消化
+## Pending
 
 - SKIP: postgres backend swap — I'm not going to support PG, drop those
 - PRIORITIZE: PR #123 just landed, look at it before backlog
 - ADD: add a dimension: behavior under network partition (kill the
   milvus container mid-add)
 - NOTE: I'm out of office tomorrow, don't escalate anything urgent
-- 上周修的那个 web connector fix 我看了,挺好,沿着这个思路继续挖
-  worker isolation 那块
+- (plain natural language also works: the agent reads anything you write here)
 ```
 
 ### When the agent processes inbox items
 
 In prompt 1 (the explore phase), the agent should:
-1. Read `## 待消化`
+1. Read `## Pending`
 2. For each item, decide how to act:
    - `SKIP` → annotate `plan.md` Pending entries with skip markers,
      or remove them
@@ -84,7 +83,7 @@ In prompt 1 (the explore phase), the agent should:
    - `STOP` → respect the constraint going forward
    - `DIRECTION` → reflect in next cycle's exploration choice
    - `NOTE` → just absorb as context
-3. Move processed items to `## 已消化`, optionally with a one-line
+3. Move processed items to `## Processed`, optionally with a one-line
    note about how it was handled and which cycle
 
 ## escalations.md — agent → user
@@ -95,18 +94,18 @@ In prompt 1 (the explore phase), the agent should:
 # Escalations
 
 > Questions the agent surfaces for human judgment. Write your answer
-> under "## 已解决" (move the item there too), or edit a Pending item
+> under "## Resolved" (move the item there too), or edit a Pending item
 > in-place if you just want to clarify.
 
-## 待处理
+## Open
 
 ### (cycle <id>) Brief title
 
-**背景:** what's being tested / why it matters
-**问题:** what's ambiguous / what specifically needs the human's input
-**建议选项:** A / B / C with trade-offs
+**Context:** what's being tested / why it matters
+**Question:** what's ambiguous / what specifically needs the human's input
+**Options:** A / B / C with trade-offs
 
-## 已解决
+## Resolved
 
 (answered items move here with the user's answer)
 ```
@@ -121,10 +120,10 @@ A good escalation is **actionable in five minutes** by the user.
 | "Need help with the auth flow" | "OAuth callback should fail open or fail closed on Slack 5xx? Spec doesn't say. A: silent skip with WARN log / B: hard error 503. Both are reasonable." |
 | "Decided to skip this for now" | (don't escalate; just mark plan.md item BLOCKED with reason) |
 
-In `2_execute.md`, instruct the middle agent to:
+In `prompts/2_execute.md`, instruct the middle agent to:
 - Always include **context + question + 2–3 options with trade-offs**
 - Use the user's language (per the Language rule)
-- Move items to `## 已解决` only after the user has answered (the user
+- Move items to `## Resolved` only after the user has answered (the user
   fills in answers themselves; the agent doesn't move them
   preemptively)
 
@@ -132,12 +131,12 @@ In `2_execute.md`, instruct the middle agent to:
 
 Three valid forms:
 
-1. **Pick a letter** — `选 A` / `B` / `pick C`
-2. **Write a sentence** — `这个保持向后兼容,加 alias`
-3. **Decline to decide** — `先 SKIP,以后再说` (the agent then drops
+1. **Pick a letter** — `A` / `B` / `pick C`
+2. **Write a sentence** — `keep backward-compatible, add an alias`
+3. **Decline to decide** — `SKIP for now, decide later` (the agent then drops
    the item from active consideration)
 
-After answering, the user moves the item to `## 已解决` themselves
+After answering, the user moves the item to `## Resolved` themselves
 (small social contract: the user owns the move because that signals
 "I've decided"). Or they can ask Layer 4 agent to do it for them.
 
@@ -151,7 +150,7 @@ appropriate tier:
 | Answer a specific question the agent asked | edit `escalations.md` |
 | Push a new instruction or shift | edit `inbox.md` |
 | Quickly remove a single Pending item | also `inbox.md` with `SKIP:` |
-| Change the prompt template behavior permanently | edit `1_explore.md` or `2_execute.md` directly |
+| Change the prompt template behavior permanently | edit `prompts/1_explore.md` or `prompts/2_execute.md` directly |
 | Reshape `plan.md` directly | discouraged, but allowed (see below) |
 
 ## plan.md editing

@@ -44,8 +44,8 @@ ambiguous ones.
 | File | What to customize |
 |---|---|
 | `trigger.sh` | `REPO`, `WATCH_QUERY` (which issues/PRs to track), `POLL_FREQ` |
-| `1_explore.md` | Triage rubric for this project's domain |
-| `2_execute.md` | Commit / comment policies (push or PR? comment language?) |
+| `prompts/1_explore.md` | Triage rubric for this project's domain |
+| `prompts/2_execute.md` | Commit / comment policies (push or PR? comment language?) |
 | `_meta.md` | Fill in once |
 
 ## How the loop runs differently from schedule type

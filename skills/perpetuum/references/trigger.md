@@ -221,7 +221,7 @@ overhead (no listener, no port).
 
 ## Things that should NOT go in trigger.sh
 
-- The prompt content (it's in `1_explore.md` / `2_execute.md`)
+- The prompt content (it's in `prompts/1_explore.md` / `prompts/2_execute.md`)
 - Decisions about what to do with findings (Layer 2 / the middle agent does that)
 - Any code that reads `plan.md` or `escalations.md` (only the middle agent reads those)
 - The cycle's actual work (delegated to middle agent via tmux paste)

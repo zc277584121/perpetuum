@@ -38,8 +38,8 @@ out into a dedicated task type lets you:
 | File | Customize |
 |---|---|
 | `trigger.sh` | `MIDDLE_SESSION`, `MAX_ITER` |
-| `1_explore.md` | Module list / scan strategy |
-| `2_execute.md` | Logging conventions (log level taxonomy, metric naming) |
+| `prompts/1_explore.md` | Module list / scan strategy |
+| `prompts/2_execute.md` | Logging conventions (log level taxonomy, metric naming) |
 | `_meta.md` | Once |
 
 ## Conventions worth committing to
@@ -52,7 +52,7 @@ Before running, decide:
   separate from the existing error log?
 
 Put these in `_meta.md` or a `conventions.md` you reference from
-`2_execute.md`. Otherwise the agent will make ad-hoc choices and
+`prompts/2_execute.md`. Otherwise the agent will make ad-hoc choices and
 your codebase will end up with inconsistent observability — which is
 worse than less observability.
 

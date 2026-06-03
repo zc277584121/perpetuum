@@ -92,8 +92,8 @@ with you, then launches.
    ↻     │ ⏰ Layer 3   trigger.sh — heartbeat, loops every cycle ↻        │
    ↻     │     loop until MAX_ITER or .stop_after_current:                 │
    ↻     │       check .paused signal                                      │
-   ↻     │       paste 1_explore.md → wait for done flag                   │
-   ↻     │       paste 2_execute.md → wait for done flag                   │
+   ↻     │       paste prompts/1_explore.md → wait for done flag                   │
+   ↻     │       paste prompts/2_execute.md → wait for done flag                   │
    ↻     │       sleep SLEEP_BETWEEN_CYCLES                                │
    ↻ ↻ ↻ │     trigger modes:  schedule  |  conditional  |  webhook        │
          └────────────────────────────────┬────────────────────────────────┘
@@ -142,8 +142,8 @@ the answers to "what's the technique behind this?":
   monotonically improving — borrowed from Karpathy's AutoResearch
   pattern, but without requiring a scalar metric.
 - **Exploration vs exploitation as separate prompts.** Phase 1
-  (`1_explore.md`) is divergent — list new dimensions, sample broadly,
-  populate the backlog. Phase 2 (`2_execute.md`) is convergent — work
+  (`prompts/1_explore.md`) is divergent — list new dimensions, sample broadly,
+  populate the backlog. Phase 2 (`prompts/2_execute.md`) is convergent — work
   through the backlog one item at a time, commit or escalate. Merging
   them into one prompt is what makes long Ralph-style runs go off the
   rails.

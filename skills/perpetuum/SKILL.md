@@ -86,8 +86,8 @@ linked reference.
   `references/design.md`.
 
 - **Exploration vs exploitation split.** Two prompts per cycle.
-  `1_explore.md` is divergent (list dimensions, sample broadly,
-  populate the backlog). `2_execute.md` is convergent (work through
+  `prompts/1_explore.md` is divergent (list dimensions, sample broadly,
+  populate the backlog). `prompts/2_execute.md` is convergent (work through
   the backlog, commit or escalate). Lexically-sorted files mean you
   can drop a `3_reflect.md` in to add a reflection phase without
   touching code. Details in `references/trigger.md`.
@@ -264,9 +264,9 @@ Look at `examples/` for the closest task shape and copy that
 directory's contents to `<project>/.perpetuum/<task-name>/`. Then
 customize:
 
-- `1_explore.md` — replace generic dimension hints with this
+- `prompts/1_explore.md` — replace generic dimension hints with this
   project's actual axes; use the user's language
-- `2_execute.md` — set the `--project` absolute path; adjust
+- `prompts/2_execute.md` — set the `--project` absolute path; adjust
   commit-style and classification policy to the project
 - `trigger.sh` — set `MIDDLE_SESSION` to something unique, adjust
   `MAX_ITER`, decide trigger type (schedule / conditional / webhook).
@@ -357,7 +357,7 @@ to know how to drive.
 - **What they can edit, and how.**
   - `inbox.md` — yes, anytime, write a one-liner under `## Pending`
   - `escalations.md` — yes, write answers in `## Resolved`
-  - `1_explore.md` / `2_execute.md` — yes, the next cycle picks up
+  - `prompts/1_explore.md` / `prompts/2_execute.md` — yes, the next cycle picks up
     edits
   - `trigger.sh` — yes for cadence / `MAX_ITER`
   - `plan.md` — **avoid**, agent-owned; route changes through

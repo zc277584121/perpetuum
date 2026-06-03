@@ -39,7 +39,7 @@ scalar metric, monotonic ratchet keeps only improvements.
 
 ```
 .perpetuum/<task>/
-├── trigger.sh, 1_explore.md, 2_execute.md, plan.md, inbox.md,
+├── trigger.sh, prompts/1_explore.md, prompts/2_execute.md, plan.md, inbox.md,
 │   escalations.md, _meta.md  (standard)
 ├── draft.md                  ← the article you're polishing (you write the v0)
 ├── target_corpus/            ← directory of target author's articles
@@ -75,8 +75,8 @@ improvements pass, big enough that noise doesn't.
 | File | Customize |
 |---|---|
 | `trigger.sh` | `MAX_ITER`, `SLEEP_BETWEEN_CYCLES` (shorter than testing — 15–20 min is fine) |
-| `1_explore.md` | The "style dimensions" the agent should sample |
-| `2_execute.md` | The exact `style_score.py` call signature you use |
+| `prompts/1_explore.md` | The "style dimensions" the agent should sample |
+| `prompts/2_execute.md` | The exact `style_score.py` call signature you use |
 | `style_score.py` | Replace the placeholder logic with your real scoring |
 | `target_corpus/` | Put the target author's articles here |
 | `draft.md` | Your starting draft |

@@ -31,7 +31,7 @@ Everything else in perpetuum exists to support this invariant safely:
 | 1 | Discriminator / Generator separation (GANs) | Layer 2 judges, Layer 1 generates. They never share context. |
 | 2 | Monotonic ratchet | Every Done item is a commit. plan.md `[x]` is append-only by convention. |
 | 3 | Three-layer architecture (stupid → smart → stupid) | trigger.sh is dumb, middle is smart, inner is dumb. Smartness concentrated in the middle. |
-| 4 | Exploration vs Exploitation prompt split | 1_explore.md plans, 2_execute.md does. Cannot be merged without losing this property. |
+| 4 | Exploration vs Exploitation prompt split | `prompts/1_explore.md` plans, `prompts/2_execute.md` does. Cannot be merged without losing this property. |
 | 5 | File-based persistent memory | plan.md + inbox.md + escalations.md + git log. No vector DB, no embeddings. |
 | 6 | Asynchronous human escalation | escalations.md never blocks the loop. New cycles still run. |
 | 7 | Trigger abstraction | schedule / conditional / webhook are all valid Layer 3 implementations. Same Layer 2/1. |
@@ -84,7 +84,7 @@ A perpetuum task can be paused at noon, resumed at 11pm, killed in a
 crash recovery, and relaunched the next morning — and the next cycle
 picks up exactly where it left off, because state is files and git.
 
-That's the actual product. "永动机" is the marketing.
+That's the actual product. The "perpetual motion" framing is the marketing.
 
 ## Why two prompts, not one, not three
 
@@ -98,7 +98,7 @@ from Pending only".
 
 ### Why two is the default
 
-`1_explore.md` and `2_execute.md` cover the two cognitive modes:
+`prompts/1_explore.md` and `prompts/2_execute.md` cover the two cognitive modes:
 divergent (what could be done) and convergent (do what's in the plan).
 The middle agent switches mode cleanly because they are physically
 different prompts pasted into the TUI at different times.
@@ -108,7 +108,7 @@ different prompts pasted into the TUI at different times.
 If your task has a distinct *reflection* phase ("look at what was done
 this cycle, identify patterns, adjust `plan.md` for next cycle"), add
 `3_reflect.md`. trigger.sh picks it up automatically (lexical sort of
-`[0-9]*_*.md`).
+`prompts/[0-9]*_*.md`).
 
 If your task has a distinct *check-the-world* phase before exploring
 (e.g. "fetch GitHub PR list and write it to inbox before planning"),
@@ -174,7 +174,7 @@ All three are needed. None is redundant.
 
 These are real and unresolved. Don't hide them from advanced users.
 
-1. **Local-optima trap.** The ratchet is greedy. If `1_explore.md`'s
+1. **Local-optima trap.** The ratchet is greedy. If `prompts/1_explore.md`'s
    "breadth vs depth balance" guidance fails, the agent will dig the
    same well over and over. Mitigations: explicit category-switch
    directives in inbox; periodic human review; running multiple tasks
