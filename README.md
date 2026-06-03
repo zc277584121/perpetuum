@@ -32,11 +32,12 @@ uses to fix each:
    and give the agent unlimited interpretive freedom. With nothing
    actively pulling it back to the main thread or vetting its mid-run
    decisions, it wanders.
-   **→ perpetuum** forces a narrow, judgeable goal up front
-   (suitability gate), then uses Layer 2's two-prompt **plan / judge**
-   cycle every round — `plan` re-checks the direction the agent is
-   heading, `judge` rejects "fake progress" from Layer 1 before it
-   becomes a commit.
+   **→ perpetuum** forces a narrow, judgeable goal up front (via a
+   suitability gate at setup), then runs a **two-prompt cycle every
+   round** — one prompt re-checks the direction the agent is heading,
+   the other dispatches the actual work and judges the result before
+   it can become a commit. The plan-then-judge separation is what
+   stops "fake progress" from accumulating silently.
 
 2. **No continuation mechanism → one short run and you're done.**
    `/goal` is single-session. Even the "infinite loop" variants are
@@ -44,9 +45,11 @@ uses to fix each:
    real "do more of this" work — find more bugs, fit a metric
    tighter, watch for new PRs — needs the loop to span sessions,
    restarts, and different kinds of trigger.
-   **→ perpetuum's Layer 3** abstracts triggers into three kinds
-   (`schedule` / `conditional` / `webhook`) and stitches arbitrarily
-   many cycles together on the time axis.
+   **→ perpetuum** abstracts triggers into three kinds —
+   `schedule` (every N minutes), `conditional` (poll an external
+   state), `webhook` (event-driven) — and stitches arbitrarily many
+   cycles together on the time axis. The cycles persist across
+   sessions, restarts, days.
 
 3. **Human-in-the-loop is a wall, not a sluice → the first ambiguity
    freezes everything.** Traditional loops have no way to keep going
@@ -55,9 +58,9 @@ uses to fix each:
    means dead.
    **→ perpetuum** has three async channels — `escalations.md`
    (agent surfaces A/B/C options for ambiguous decisions),
-   `inbox.md` (you push instructions back in whenever), and
-   **Layer 4** (the host agent you're talking to, which monitors,
-   coordinates, and translates your natural-language asks into file
+   `inbox.md` (you push instructions back in whenever), plus your
+   host coding agent itself, which monitors all the files and
+   translates your natural-language asks into the right file
    operations) — so the loop keeps progressing while you answer at
    your own pace.
 
