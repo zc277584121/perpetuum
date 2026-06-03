@@ -327,6 +327,49 @@ nohup .perpetuum/<task>/trigger.sh > /dev/null 2>&1 &
 
 Or hand the launch command to the user to start when they're ready.
 
+## Known Codex compatibility issues
+
+For Codex CLI users, three quirks are worth knowing — the first two
+are already handled by the default `trigger.sh`, the third lives in
+`cc-use` upstream and may surface during setup.
+
+1. **Codex tmux "Enter doesn't commit" bug**
+   ([openai/codex#12645](https://github.com/openai/codex/issues/12645)).
+   After a model turn completes inside tmux, Enter alone sometimes
+   doesn't submit. `send_prompt` in trigger.sh uses the same five-step
+   sequence cc-use uses (`C-u` → `paste-buffer -d` → `Enter` → `C-m`
+   → `Enter`), which handles this. No action needed.
+
+2. **"Create a plan?" popup on complex prompts**. Codex shows this
+   suggestion when it sees long planning-style prompts (our
+   `1_explore.md` is exactly that). `send_prompt` detects Codex via
+   `$AGENT_CMD` and sends `Escape` after paste to dismiss it before
+   submitting. No action needed.
+
+3. **`cc-use` Codex startup parameter clash with bypass mode** —
+   ⚠️ **upstream cc-use issue, not perpetuum.** cc-use's
+   `build_codex_command` hardcodes `--ask-for-approval` and
+   `--sandbox` flags, which conflict with the outer Codex's
+   `--dangerously-bypass-approvals-and-sandbox` mode. Symptom: the
+   middle agent reports "cc-use failed to start inner Codex agent"
+   or similar, and may try to work around by spawning a sub-agent
+   directly (this defeats the three-layer architecture). If you hit
+   this:
+   - Check that cc-use is installed in the current agent's skill
+     environment and is the latest version
+   - If the issue persists, file it upstream at
+     [zc277584121/cc-use](https://github.com/zc277584121/cc-use)
+     (suggest adding an env var to override the Codex startup flags)
+   - Until fixed, prefer Claude Code as the outer agent for the
+     middle layer (Layer 1 / inner can still be Codex — the issue
+     is only when the outer is also Codex in bypass mode)
+
+The execute prompts in `examples/` already instruct the middle agent
+to **escalate** any cc-use failure rather than work around it locally
+— surface it as a blocked-on-environment item in `escalations.md`
+and stop the cycle, do not fake a fresh inner context within your
+own conversation.
+
 ## Core invariants (do not violate)
 
 These are the things that keep the loop honest. Don't weaken them

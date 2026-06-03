@@ -18,6 +18,22 @@ Steps:
 
 3. Dispatch the edit. You can either:
    - Edit `draft.md` directly (simple cases)
+> ⚠️ **Important: `cc-use` is an installed Agent Skill, not a shell command.**
+> Use it via your host agent's skill mechanism (your host will load
+> cc-use's SKILL.md and know how to dispatch the inner agent). **Do not**
+> run `cc-use` directly with the Bash tool — that bypasses the skill
+> protocol and will fail.
+>
+> If your environment does not recognize `cc-use` as a skill, or `cc-use`
+> reports an inner-agent startup failure (a known issue exists for Codex
+> outer agents in `--dangerously-bypass-approvals-and-sandbox` mode where
+> cc-use's hardcoded `--ask-for-approval` / `--sandbox` flags clash —
+> upstream cc-use issue, not perpetuum): **do not fall back to
+> Bash-running cc-use, do not spawn a sub-agent yourself, do not write
+> the work into this session's context directly.** Surface it as a
+> blocked-on-environment escalation to `escalations.md` and stop the
+> cycle there. The whole point of the three-layer architecture is the
+> fresh-context inner agent; faking it locally defeats the purpose.
    - Dispatch via `cc-use delegate` if the edit is involved
      (`--project /<abs-path>`, `--agent claude`, task = "rewrite the
      <section> of draft.md to <intended change>; don't change other
