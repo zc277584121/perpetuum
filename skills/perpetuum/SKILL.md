@@ -262,7 +262,12 @@ customize:
 - `2_execute.md` — set the `--project` absolute path; adjust
   commit-style and classification policy to the project
 - `trigger.sh` — set `MIDDLE_SESSION` to something unique, adjust
-  `MAX_ITER`, decide trigger type (schedule / conditional / webhook)
+  `MAX_ITER`, decide trigger type (schedule / conditional / webhook).
+  The script also reads an `AGENT_CMD` env var: default is Claude Code,
+  but users on Codex / Cursor / etc. can override before launch (e.g.
+  `AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"` or
+  the safer `AGENT_CMD="codex --full-auto"`). Mention this explicitly
+  to non-Claude-Code users.
 - `_meta.md` — fill in worktree path, branch, parent repo, merge
   target
 - Leave `plan.md`, `inbox.md`, `escalations.md` empty (their skeletons
