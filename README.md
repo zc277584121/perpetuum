@@ -234,6 +234,16 @@ arrives async without freezing anything (P3). Together that's what
 
 Install using [`npx skills`](https://skills.sh).
 
+> 💡 **Works in both Claude Code and Codex.** Most autonomous-loop
+> projects target one host CLI; `perpetuum` is host-agnostic by
+> design — Layer 1 dispatches through [`cc-use`](https://github.com/zc277584121/cc-use),
+> which speaks whichever coding agent is installed (`claude`, `codex`,
+> and 40+ more). The same `plan.md` / `inbox.md` / `escalations.md`
+> contract, the same trigger modes, the same judge/dispatch logic —
+> they run identically regardless of host. You can even start a task
+> from Claude Code and pick it up later from Codex; the state is just
+> files on disk.
+
 ### Install to all supported agents
 
 ```bash
@@ -470,8 +480,12 @@ for the long-form rationale.
 
 | Project | disc/gen split | ratchet | multi-layer | explore/exploit split | persistent memory | async human | trigger abstraction | file contract |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Claude Code [plan mode](https://code.claude.com/docs/en/plan-mode) | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| Codex `/plan` mode | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
 | Claude Code [`/goal`](https://code.claude.com/docs/en/goal) | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Codex [`/goal`](https://github.com/openai/codex) | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
+| [`goalbuddy`](https://github.com/tolibear/goalbuddy) | ❌ | ⚠️ | ❌ | ⚠️ | ✅ | ❌ | ❌ | ✅ |
+| [`OpenSpec`](https://github.com/Fission-AI/OpenSpec) | ❌ | ❌ | ❌ | ⚠️ | ✅ | ❌ | ❌ | ✅ |
 | [Ralph Loop](https://ghuntley.com/loop/) | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
 | [`recursive-improve`](https://github.com/kayba-ai/recursive-improve) | ❌ | ✅ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
 | [Karpathy AutoResearch](https://github.com/karpathy/autoresearch) | ❌ | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ | ✅ |
@@ -480,13 +494,35 @@ for the long-form rationale.
 | nuwa-skill / [persona](https://github.com/migueldeguzman/persona) | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
 | **`perpetuum`** (this) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
+A few notes on the new entries:
+
+- **Plan modes** (Claude Code, Codex) are single-session "draft a plan,
+  approve, execute" gates. Useful inside one conversation; nothing
+  about them spans cycles or recovers across restarts.
+- **`goalbuddy`** is the closest in spirit — a "better `/goal`" with
+  Scout/Judge/Worker subagents, a local board, and `goal.md` +
+  `state.yaml` for state. But Judge picks the *next* slice (a planner
+  role) rather than judging Worker's *output* before it lands, so
+  there is no true discriminator/generator separation; the loop is
+  also schedule-less and synchronous on human input.
+- **`OpenSpec`** is a spec-driven-development framework — proposal /
+  specs / design / tasks files with `/opsx:propose` → `/opsx:apply` →
+  `/opsx:archive`. Strong on file contract and cross-session state,
+  but it's a workflow scaffold, not an autonomous loop: no
+  cycle-by-cycle ratchet, no trigger abstraction, no async
+  escalation channel.
+
 Each of the other projects is deeper than `perpetuum` on some single
 axis — Karpathy's contract is more elegant for problems with a scalar
 metric, Darwin Gödel modifies its own model code, EvoSkills evolves
-multi-file skill packages. `perpetuum`'s contribution is the
-combination none of the others combine — especially the three axes
-most relevant to "keep running across days": **async human
-escalation**, **trigger abstraction**, and **explore/exploit split**.
+multi-file skill packages, `goalbuddy` has a much nicer board UI for
+short runs. `perpetuum`'s contribution is the combination none of the
+others combine — especially the three axes most relevant to "keep
+running across days": **async human escalation**, **trigger
+abstraction**, and **explore/exploit split**. Of the projects above,
+only `perpetuum`, `goalbuddy`, and `OpenSpec` install cleanly into
+*both* Claude Code and Codex; the rest target one host or are
+framework-level only.
 
 ## 🔄 Updating
 
