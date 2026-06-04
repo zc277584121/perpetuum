@@ -283,11 +283,6 @@ Then in any project, ask your coding agent:
 > Use perpetuum to run continuous adversarial testing on this project
 > for the next couple of days.
 
-The skill walks you through a suitability gate (is this actually a task
-that benefits from a persistent loop?), picks the closest example,
-customizes prompts and trigger for your case, confirms cost/cadence
-with you, then launches.
-
 ## 🏗️ Architecture
 
 Four layers, each tied to one of the three problems above. Read the
@@ -381,7 +376,10 @@ Use perpetuum to keep training this LoRA overnight. Each cycle, pick
 one hyperparameter to vary (lr, rank, dropout, batch size), kick off
 a short training run, eval on the val set, record val loss + a sample
 generation. Stop after 50 trials or when val loss hasn't improved for
-10 cycles. Commit one row to results.csv per trial.
+10 cycles. Commit one row to results.csv per trial. Cap each
+hyperparameter's range up front and keep the val set off-limits to
+the loop — that's how this kind of sweep avoids local-optimum
+dead-ends and metric-hacking shortcuts.
 ```
 
 🚦 **CI failure triage on the main branch**
@@ -476,52 +474,6 @@ Don't reach for perpetuum if:
   wall-clock time for unattended time. If you're waiting, you're
   using it wrong.
 
-The suitability gate at init will push back, or refuse, if your
-task lands in this second list. It also picks the closest match
-from [`examples/`](skills/perpetuum/examples/) (currently
-`adversarial-testing`, `github-watcher`, `style-distill`,
-`article-polish`, `observability-gap`) as the starting point for
-your customized prompts and trigger.
-
-<details>
-<summary><b>What the state files actually look like</b></summary>
-
-<br>
-
-```markdown
-# plan.md   (agent-maintained)
-## Pending
-- [ ] [auth] test expired token refresh
-- [ ] [parse] malformed XML input
-
-## Done
-- [x] (cycle 3) [auth] login flow
-  - operation: cli login --user x
-  - observed: 200 + valid JWT
-  - status: PASS
-- [x] (cycle 5) [parse] xss in error envelope
-  - status: [FIXED] commit:abc1234
-```
-
-```markdown
-# inbox.md   (you write)
-## Pending
-- SKIP: postgres backend, not shipping
-- PRIORITIZE: PR #123 first
-- NOTE: I'm OOO Friday, no urgent escalations
-```
-
-```markdown
-# escalations.md   (agent writes ## Open, you fill ## Resolved)
-## Open
-### (cycle 4) off-by-one in --range flag
-A: 1-based inclusive (matches head/tail/sed)
-B: 0-based half-open (matches array semantics in most languages)
-C: leave both, document the discrepancy
-```
-
-</details>
-
 ### While it's running
 
 Once launched, the task is a black box. You don't need to know which
@@ -568,58 +520,81 @@ The three core problems above are what perpetuum solves. To solve
 them it leans on nine deliberate design choices — each individually
 well-known, none combined like this in prior art. These are the
 same nine axes the comparison table below scores every project on,
-in the same order. Read this section, then read the table; the
-table will then read like a checklist instead of a wall of emoji.
+in the same order.
 
-1. **Discriminator / Generator separation** (from GANs). Layer 2 is
+1. **Ralph Loop, generalized — the heartbeat that keeps things
+   moving.** The original [Ralph Loop](https://ghuntley.com/loop/)
+   is the simplest possible "keep moving" engine: a `while true` in
+   a shell script that re-prompts the agent over and over. That
+   infinite-loop instinct is the raw driving force behind anything
+   "perpetual" — without it, you get one response and you stop.
+   perpetuum's Layer 3 is that same heartbeat, but generalized to
+   three trigger families instead of just one: **schedule** (the
+   Ralph default — every N minutes), **conditional** (poll an
+   external state like `gh pr list` and only fire on real change),
+   **webhook** (react to incoming events). Same Layer 2 / Layer 1
+   stack behind all three. This is what lets one skill cover both
+   "spin up every hour" and "spin up when a PR arrives" without
+   rewriting the inner loop.
+
+2. **Discriminator / Generator separation** (from GANs). Layer 2 is
    the discriminator — it sees the entire history, judges every
    proposal, but does not run code itself. Layer 1 is the generator —
    fresh context every dispatch, runs the actual operation, has no
    memory of what came before. Because they share no context, neither
    can fake a result the other would accept. This is what kills the
-   self-certifying failure mode in `/goal` and Ralph Loop.
+   self-certifying failure mode in `/goal` and Ralph Loop, where the
+   same agent both produces and grades — over a long run, that
+   collapses into "everything is fine, keep going".
 
-2. **Monotonic ratchet** via local `git commit`. Layer 2 judges every
+3. **Asynchronous human escalation — the thing that makes "perpetual"
+   actually perpetual.** When Layer 2 hits an ambiguous decision
+   (off-by-one semantics, naming convention, product call) it writes
+   A/B/C options to `escalations.md ## Open` and **moves on to the
+   next item in the same cycle**. The human answers later, whenever
+   convenient. The loop never blocks waiting for a reply. Without
+   this, the first hard question you hit while you're asleep stops
+   the whole engine until you wake up; with it, the loop runs through
+   the night, builds a small queue of decisions waiting for you, and
+   keeps producing on everything that isn't blocked. This is the
+   single feature most other autonomous-loop projects don't have, and
+   it's the difference between "runs unattended for 20 minutes" and
+   "runs unattended for a week".
+
+4. **Monotonic ratchet** via local `git commit`. Layer 2 judges every
    Layer 1 proposal *before* it becomes a commit — rejected ones
    never enter history. Accepted ones land as a clean append-only
    sequence on the branch, and `git log` doubles as the durability
    mechanism across sessions, machines, and reboots. Without a
    ratchet, you can't tell progress from noise on a long run.
 
-3. **Three-layer architecture** (dumb → smart → dumb). Layer 3 is
-   intentionally a few hundred lines of bash — no LLM, no judgment,
-   just heartbeat. Layer 2 is the only smart layer. Layer 1 is a
-   fresh-context worker with no opinions of its own. Splitting the
-   smart middle from a dumb-cheap outer wrapper is what keeps the
-   middle agent's context clean over long runs and what makes the
-   loop crash-tolerant.
-
-4. **Exploration vs Exploitation split** at the prompt level.
+5. **Exploration vs Exploitation split** at the prompt level.
    Phase 1 (`prompts/1_explore.md`) is divergent — re-read state,
    re-check direction, queue new pending items. Phase 2
    (`prompts/2_execute.md`) is convergent — work down the queue,
    one item at a time, commit or escalate. Fusing them into one
    prompt is what makes long Ralph-style runs drift.
 
-5. **File-based persistent memory.** plan / inbox / escalations +
+6. **File-based persistent memory.** plan / inbox / escalations +
    the git log are the entire memory system. No vector DB, no
    embeddings. Layer 2 re-reads these files at the start of every
    cycle, so context rot stays bounded and state survives any
    restart — pause at noon, resume at midnight, next cycle picks
    up exactly where the last one left off.
 
-6. **Asynchronous human escalation.** When Layer 2 hits an ambiguous
-   decision (off-by-one semantics, naming convention, product-call),
-   it writes A/B/C options to `escalations.md ## Open` and *moves
-   on to the next item*. The human answers when convenient; the
-   loop never blocks waiting for a reply. This is what makes
-   "overnight, no synchronous attention" actually work.
-
-7. **Trigger abstraction.** Layer 3 supports three trigger families:
-   schedule (every N minutes), conditional (poll an external state
-   like `gh pr list`), webhook (react to incoming events). All
-   three feed the same Layer 2 / Layer 1 stack — switching trigger
-   doesn't touch the judge or executor.
+7. **Architectural decoupling and responsibility separation.** Each
+   layer owns one well-defined job: Layer 3 owns "keep ticking",
+   Layer 2 owns "judge and dispatch", Layer 1 owns "do one bounded
+   piece of work in fresh context". **Inside** each layer the
+   implementation is freely swappable — Layer 3 could be `trigger.sh`,
+   cron, a GitHub Actions runner, or a Lambda; Layer 2 could be
+   Claude Code, Codex, Cursor, or another coding-agent TUI; Layer 1
+   could be any `cc-use`-supported agent. The interfaces between
+   layers (file state, tmux paste, `cc-use delegate`) are what stays
+   stable; everything else is interchangeable. This is why the same
+   small skill stays lightweight yet handles wildly different
+   scenarios — the **architecture is the contract**, the pieces inside
+   are not.
 
 8. **File-as-contract.** Who can edit which file is a convention,
    not enforced by code: agent owns `plan.md`, human owns `inbox.md`,
@@ -627,13 +602,21 @@ table will then read like a checklist instead of a wall of emoji.
    role-based access control, debuggable with `cat`, mergeable with
    `git`.
 
-9. **Host-agnostic dispatch.** Layer 1 is launched through
+9. **Host-agnostic dispatch, no vendor lock-in.** Because perpetuum
+   ships as an [Agent Skill](https://skills.sh) — a few hundred lines
+   of bash plus prompt templates, not a service or a framework — it
+   stays **lightweight and host-agnostic by construction**. The
+   actual coding agent is loaded at runtime via
    [`cc-use`](https://github.com/zc277584121/cc-use), which speaks
-   either Claude Code or Codex (and 40+ other coding-agent CLIs).
-   The same skill, prompts, file contracts, and trigger logic run
-   identically against whichever host you have installed — a task
-   started under Claude Code can be picked up later under Codex,
-   because the state is just files on disk.
+   Claude Code, Codex CLI, Cursor, Windsurf, Gemini CLI, Goose, and
+   40+ other coding-agent CLIs. A task started in one host can be
+   picked up later in another, because nothing in the skill is bound
+   to a specific agent's SDK, API, or proprietary protocol — the
+   state is just files on disk. **No vendor lock-in.** This matters
+   because coding agents move fast — flags get renamed, pricing
+   changes, models deprecate. You don't want your "always running"
+   infrastructure to die the day your preferred CLI ships a breaking
+   change.
 
 Removing any one of these breaks something. See
 [`skills/perpetuum/references/design.md`](skills/perpetuum/references/design.md)
@@ -641,20 +624,20 @@ for the long-form rationale on each.
 
 ## 📊 Comparison with related projects
 
-| Project | disc/gen split | ratchet | multi-layer | explore/exploit split | persistent memory | async human | trigger abstraction | file contract | Claude+Codex |
+| Project | trigger abstraction | disc/gen split | async human | ratchet | explore/exploit split | persistent memory | multi-layer | file contract | Claude+Codex |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Claude Code [plan mode](https://code.claude.com/docs/en/plan-mode) | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Codex `/plan` mode | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Claude Code [`/goal`](https://code.claude.com/docs/en/goal) | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Codex [`/goal`](https://github.com/openai/codex) | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| [`goalbuddy`](https://github.com/tolibear/goalbuddy) | ❌ | ⚠️ | ❌ | ⚠️ | ✅ | ❌ | ❌ | ✅ | ✅ |
-| [`OpenSpec`](https://github.com/Fission-AI/OpenSpec) | ❌ | ❌ | ❌ | ⚠️ | ✅ | ❌ | ❌ | ✅ | ✅ |
-| [Ralph Loop](https://ghuntley.com/loop/) | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ⚠️ |
-| [`recursive-improve`](https://github.com/kayba-ai/recursive-improve) | ❌ | ✅ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
-| [Karpathy AutoResearch](https://github.com/karpathy/autoresearch) | ❌ | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ | ✅ | ❌ |
-| [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954) | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| [EvoSkills](https://arxiv.org/abs/2604.01687) | ❌ | ✅ | ❌ | ⚠️ | ⚠️ | ❌ | ❌ | ⚠️ | ❌ |
-| nuwa-skill / [persona](https://github.com/migueldeguzman/persona) | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| Claude Code [plan mode](https://code.claude.com/docs/en/plan-mode) | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| Codex `/plan` mode | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
+| Claude Code [`/goal`](https://code.claude.com/docs/en/goal) | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Codex [`/goal`](https://github.com/openai/codex) | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
+| [`goalbuddy`](https://github.com/tolibear/goalbuddy) | ❌ | ❌ | ❌ | ⚠️ | ⚠️ | ✅ | ❌ | ✅ | ✅ |
+| [`OpenSpec`](https://github.com/Fission-AI/OpenSpec) | ❌ | ❌ | ❌ | ❌ | ⚠️ | ✅ | ❌ | ✅ | ✅ |
+| [Ralph Loop](https://ghuntley.com/loop/) | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ |
+| [`recursive-improve`](https://github.com/kayba-ai/recursive-improve) | ❌ | ❌ | ❌ | ✅ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
+| [Karpathy AutoResearch](https://github.com/karpathy/autoresearch) | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ |
+| [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954) | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| [EvoSkills](https://arxiv.org/abs/2604.01687) | ❌ | ❌ | ❌ | ✅ | ⚠️ | ⚠️ | ❌ | ⚠️ | ❌ |
+| nuwa-skill / [persona](https://github.com/migueldeguzman/persona) | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
 | **`perpetuum`** (this) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 `perpetuum` is the only one with every column checked — the
