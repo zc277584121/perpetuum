@@ -3,6 +3,19 @@
 > A perpetual-motion engine for coding agents — production-grade,
 > not a thought experiment.
 
+> 🧬 **What this actually is — a Skill, not a script.** `perpetuum`
+> ships as an [Agent Skill](https://skills.sh): a small set of
+> architectural ideas, prompt templates, trigger patterns, and a
+> handful of working examples. When you say "use perpetuum to do X",
+> your coding agent picks the closest example, **rewrites the prompts
+> and `trigger.sh` for your specific task in your own language**,
+> confirms what's tunable with you, then launches. The bash and the
+> prompts inside aren't fixed code — they're starting points the
+> agent edits to fit your case. That's why ~1 kLOC of plumbing ends
+> up flexible enough for tasks as different as ML training sweeps,
+> per-PR review, adversarial testing, and style polish: **the
+> architecture is fixed, the implementation is generated to fit**.
+
 ## 🛑 Why your `/goal` runs go nowhere
 
 You've probably tried `/goal` in Claude Code or Codex, or wired up a
@@ -328,11 +341,15 @@ After installation, perpetuum is a normal skill. From your coding
 agent's TUI, name it explicitly and describe what you want it doing
 overnight (or longer):
 
+🐛 **Adversarial bug-hunting on a CLI tool**
+
 ```text
 Use perpetuum to run continuous adversarial testing against this CLI
 for the next 30 cycles. Categories I care about: auth, parser, error
 paths. Open A/B/C when a failure mode is ambiguous.
 ```
+
+📥 **GitHub issue triage on a busy repo**
 
 ```text
 Use perpetuum to watch this repo's GitHub issues and triage new ones
@@ -340,11 +357,15 @@ every hour. Tag them, suggest labels, escalate only the ones that
 need a product decision.
 ```
 
+👁️ **Observability gap discovery in a service module**
+
 ```text
 Use perpetuum to keep finding observability gaps in the worker module
 for ~20 cycles, then stop and let me review. Commit each gap-fix as
 a separate commit so I can cherry-pick.
 ```
+
+✍️ **Style transfer toward a target author's voice**
 
 ```text
 Use perpetuum to iteratively polish this draft article toward
@@ -353,11 +374,25 @@ Karpathy's writing style. His articles are in target_corpus/. Use BLEU
 when the metric plateaus for 5 cycles.
 ```
 
+🧪 **ML hyperparameter sweep / overnight training run**
+
+```text
+Use perpetuum to keep training this LoRA overnight. Each cycle, pick
+one hyperparameter to vary (lr, rank, dropout, batch size), kick off
+a short training run, eval on the val set, record val loss + a sample
+generation. Stop after 50 trials or when val loss hasn't improved for
+10 cycles. Commit one row to results.csv per trial.
+```
+
+🚦 **CI failure triage on the main branch**
+
 ```text
 Use perpetuum to watch CI on the main branch. When a build fails,
 diagnose, propose a fix, commit it to a fix/<short-name> branch, and
 open a PR. Don't push to main directly. Run on the webhook trigger.
 ```
+
+🔍 **Per-PR security risk review**
 
 ```text
 Use perpetuum to comb every PR in this repo for security-relevant
@@ -366,21 +401,57 @@ risk note. Run on the conditional trigger — only spin up when a new
 PR arrives.
 ```
 
+🔁 **Long, mechanical migration across a large codebase**
+
+```text
+Use perpetuum to migrate every call site of `old_api.call(...)` to
+`new_api.call(..., context=...)` in this repo. One module per cycle:
+read it, edit the call sites, run that module's tests, commit. Skip
+test files for now. Open A/B/C if a call site has non-trivial
+side-effect semantics.
+```
+
+After you describe a task this way, the skill walks you through a
+short back-and-forth — what "done" looks like for your case, how
+often to run, where to commit, which decisions to auto-make vs
+escalate — and only launches once both sides agree. The first
+message is a request; the actual config is nailed down in that gate
+before any cycles burn tokens.
+
+The list above isn't exhaustive. **Anything that fits the criteria
+below — narrow goal, judgeable signal, many small steps, etc. — is a
+candidate, even if it has nothing to do with code:** literature
+reviews that compound over days, dataset curation, slow translation
+of a large doc, long-form prompt tuning, anything where "a little
+more, every hour" is what you want.
+
 ### Why these tasks fit
 
 The pattern they share:
 
-- **A clear, narrow goal**, not "make this project better".
-- **A judgeable signal** — pass/fail, a number that goes up, a diff
-  someone can review. Without one, the ratchet has nothing to ratchet on.
+- **A clear, narrow goal**, not "make this project better". *e.g. the
+  adversarial example names auth / parser / error paths; the ML sweep
+  names which 4 hyperparameters to vary; the migration names one
+  exact call-site pattern.*
+- **A judgeable signal** — pass/fail, a number that moves, a diff
+  someone can review. Without one, the ratchet has nothing to ratchet
+  on. *e.g. CI watcher uses build status; ML sweep uses val loss;
+  style polish uses BLEU + LLM judge; migration uses module-level
+  test pass.*
 - **Many small steps**, not one big atomic delivery — perpetuum's
-  advantage compounds over cycles.
+  advantage compounds over cycles. *e.g. 30 adversarial cycles, 50
+  hyperparameter trials, one PR scanned per arrival, one module
+  migrated per cycle.*
 - **Tolerance for the inner agent being wrong sometimes** — the
   outer judge catches it, but if a single wrong step is catastrophic
-  (e.g. deploying to prod), this is the wrong tool.
+  (e.g. deploying to prod), this is the wrong tool. *e.g. the CI
+  watcher fixes go through a PR, never `git push` to main; migration
+  commits are per-module, easy to revert.*
 - **Either the work itself takes a long time, or you want to do a
   small step many times over many days.** A 10-minute task doesn't
-  need perpetuum; a 10-cycle task across a long weekend does.
+  need perpetuum; a 10-cycle task across a long weekend does. *e.g.
+  ML sweeps span overnight, PR review compounds as PRs arrive over a
+  week, migration may take days of small commits.*
 
 ### When it's the wrong tool
 
@@ -405,14 +476,12 @@ Don't reach for perpetuum if:
   wall-clock time for unattended time. If you're waiting, you're
   using it wrong.
 
-The skill walks you through a suitability gate at init — it will
-push back, or refuse, if your task lands in the second list. It
-also picks the closest example from
-[`examples/`](skills/perpetuum/examples/) (currently:
+The suitability gate at init will push back, or refuse, if your
+task lands in this second list. It also picks the closest match
+from [`examples/`](skills/perpetuum/examples/) (currently
 `adversarial-testing`, `github-watcher`, `style-distill`,
-`article-polish`, `observability-gap`), customizes the prompts and
-trigger for your case, walks through a cost/cadence check, then
-launches.
+`article-polish`, `observability-gap`) as the starting point for
+your customized prompts and trigger.
 
 <details>
 <summary><b>What the state files actually look like</b></summary>

@@ -23,6 +23,20 @@ A persistent three-layer "explore → execute → escalate" loop on top of
 `cc-use`. Designed for tasks whose value grows with how many findings
 or improvements an agent can produce over hours or days.
 
+**What ships here is a framework, not fixed source code.** The
+architecture (three layers, two prompts, three trigger families,
+file-as-contract, async escalation) is what's fixed and what makes the
+loop reliable. Everything else — the wording in `prompts/1_explore.md`
+and `prompts/2_execute.md`, the bash in `trigger.sh`, the classification
+logic the middle agent applies, even the exact structure of `plan.md` /
+`inbox.md` / `escalations.md` — are **templates to adapt to the user's
+specific task, domain, project, and language**. When you set up a new
+task with the user, treat the files copied from `examples/` as starting
+points and rewrite them to fit. Don't treat them as immutable scripts.
+This is what keeps a small skill flexible enough to handle adversarial
+testing, ML hyperparameter sweeps, PR review, migrations, and style
+polish without code changes.
+
 This file is a router. Every mechanism below has a one-paragraph
 summary here; details live in `references/`. Read the relevant
 reference when the user's intent matches the corresponding section.
