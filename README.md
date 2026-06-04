@@ -25,52 +25,210 @@ your reply. Like a steady, diligent collaborator who just keeps working.
 
 There are **three specific reasons** today's autonomous-agent attempts
 fail at "perpetual" — and three corresponding mechanisms perpetuum
-uses to fix each:
+uses to fix each. **Click each one to expand for the full explanation
+and an ASCII diagram:**
 
-1. **Vague goals, wide operating space → the agent drifts off-target.**
-   `/goal`-style tools accept whatever sentence you typed as the goal
-   and give the agent unlimited interpretive freedom. With nothing
-   actively pulling it back to the main thread or vetting its mid-run
-   decisions, it wanders.
-   **→ perpetuum** requires the goal to be narrow and judgeable
-   before it starts, and in every round it explicitly separates
-   "where should we head next?" from "do this concrete piece of
-   work and check the result". Because the part that proposes the
-   work and the part that accepts it stay distinct, drift gets
-   caught and "fake progress" can't quietly accumulate.
+<details>
+<summary><b>1. Vague goals, wide operating space → the agent drifts off-target</b></summary>
 
-2. **No continuation mechanism → one short run and you're done.**
-   `/goal` is single-session. Even the "infinite loop" variants are
-   blindly time-triggered, no concept of event or condition. But a
-   lot of "keep this going" work runs on events, not a clock —
-   watching for new PRs and triaging them as they arrive, reacting
-   to alerts when they fire, scanning whenever the codebase changes.
-   The loop needs to span sessions, restarts, and respond to
-   different kinds of trigger.
-   **→ perpetuum** gives the loop a real continuation mechanism:
-   it can run on a fixed schedule, or wake up when something
-   outside changes (a new PR appears, a file is touched, an alert
-   fires), or react to incoming events. The same loop persists
-   across sessions, restarts, days — pick whatever trigger matches
-   the work.
+<br>
 
-3. **Human-in-the-loop is a wall, not a sluice → the first ambiguity
-   freezes everything.** Traditional loops have no way to keep going
-   when they hit something they can't decide alone. They guess wrong
-   or stop and wait — and if you're not at the terminal, "wait"
-   means dead.
-   **→ perpetuum** makes the human-in-the-loop interaction
-   asynchronous. When the agent hits something only you can decide,
-   it writes the question down (along with the concrete options it
-   considered) and keeps going on everything else; you answer in
-   your own time. You can also nudge the running loop with a new
-   instruction at any moment without stopping it. Nothing blocks on
-   you being at the keyboard.
+`/goal`-style tools accept whatever sentence you typed as the goal
+and give the agent unlimited interpretive freedom. With nothing
+actively pulling it back to the main thread or vetting its mid-run
+decisions, it wanders.
 
-📖 **For the full design rationale with ASCII diagrams of each
-problem and its solution, see [The three core problems,
-visualized](#-the-three-core-problems-visualized) below**
-(or just scroll down — it's the heart of the doc).
+**→ perpetuum** requires the goal to be narrow and judgeable
+before it starts, and in every round it explicitly separates
+"where should we head next?" from "do this concrete piece of
+work and check the result". Because the part that proposes the
+work and the part that accepts it stay distinct, drift gets
+caught and "fake progress" can't quietly accumulate.
+
+```
+Today (/goal, Ralph Loop): the goal sentence is open to interpretation,
+agent roams a huge unconstrained space.
+
+   ┌──────────────────────────────────────────────────────────────────┐
+   │                                                                  │
+   │     goal: "make this project better" ← user's one sentence,      │
+   │            no metric, no boundary                                │
+   │                                                                  │
+   │   start                                                          │
+   │     ●──►──►──►──╮                                                │
+   │                 ╰──►──►──►──╮                                    │
+   │                             ╰──►──►──►   ❓ off-target           │
+   │                                       ╰──►──►──►──►              │
+   │                                                  ╰──►──►──►──►   │
+   │                                                            ❓❓  │
+   │                                                                  │
+   └──────────────────────────────────────────────────────────────────┘
+       ↑ boundary = the entire interpretive space; nobody steers,
+                    agent goes wherever, however far
+
+
+perpetuum: narrow goal (suitability gate) + plan + judge every cycle
+
+   ┌── suitability gate forces a narrow, judgeable goal up front ──┐
+   │                                                               │
+   │         🔍 plan          ⚖️ judge         🔍 plan               │
+   │       (rechecks dir)   (rejects fake)   (rechecks dir)         │
+   │             ▼               ▼                ▼                 │
+   │   start     │               │                │                 │
+   │     ●──►──►─●──►──►──►──►──►●──►──►──►──►──►─●──►──►──►──►─►   │
+   │             ↑               ↑                ↑                 │
+   │      pull back on-target  reject fake     explore new          │
+   │                           progress         direction (safely)  │
+   │                                                                │
+   └────────────────────────────────────────────────────────────────┘
+
+       Key:  the boundary is intentionally narrow,
+             plan re-steers periodically, judge vetoes bad single steps.
+```
+
+</details>
+
+<details>
+<summary><b>2. No continuation mechanism → one short run and you're done</b></summary>
+
+<br>
+
+`/goal` is single-session. Even the "infinite loop" variants are
+blindly time-triggered, no concept of event or condition. But a
+lot of "keep this going" work runs on events, not a clock —
+watching for new PRs and triaging them as they arrive, reacting
+to alerts when they fire, scanning whenever the codebase changes.
+The loop needs to span sessions, restarts, and respond to
+different kinds of trigger.
+
+**→ perpetuum** gives the loop a real continuation mechanism:
+it can run on a fixed schedule, or wake up when something
+outside changes (a new PR appears, a file is touched, an alert
+fires), or react to incoming events. The same loop persists
+across sessions, restarts, days — pick whatever trigger matches
+the work.
+
+```
+Today: a /goal run is a one-shot. Done = ended.
+
+   ┌──────────────────────────────────────┐
+   │                                      │
+   │  start ●──►──►──►──►──► done/stuck ▮ │
+   │        ╰──── one-shot ────╯           │
+   │                                      │
+   │  then what? nothing. ☠                │
+   │                                      │
+   └──────────────────────────────────────┘
+       ↑ single segment on the time axis.
+         "Find more bugs forever", "watch for new PRs",
+         "react to alerts" → impossible past the first run.
+
+
+perpetuum: stitch "Problem 1's solution" across the time axis,
+indefinitely, on whichever kind of trigger fits the work.
+
+   Triggers:
+
+      ⏰ schedule        🔔 conditional         📨 webhook
+      (every N min)     (poll external state)   (event-driven)
+          │                  │                       │
+          ▼                  ▼                       ▼
+   ┌──────────┐ sleep ┌──────────┐ sleep ┌──────────┐ sleep ┌──────────┐
+   │ ►cycle 1►│ ───── │ ►cycle 2►│ ───── │ ►cycle 3►│ ───── │ ►cycle N►│ ...
+   │ (P1 solv)│       │ (P1 solv)│       │ (P1 solv)│       │ (P1 solv)│
+   │ ratchet ✓│       │ ratchet ✓│       │ ratchet ✓│       │ ratchet ✓│
+   └──────────┘       └──────────┘       └──────────┘       └──────────┘
+        ↓                 ↓                  ↓                  ↓
+        plan.md ←── persisted ←── persisted ←── persisted ←── persisted
+
+       Key:  each cycle = a safe short segment (Problem 1's solution).
+             Concatenated, they form genuine "perpetual" work.
+             Triggers are how cycles know when to start:
+               schedule    → do it more, on a timer
+               conditional → only run when external state changed
+               webhook     → only run on an external event
+```
+
+</details>
+
+<details>
+<summary><b>3. Human-in-the-loop is a wall, not a sluice → the first ambiguity freezes everything</b></summary>
+
+<br>
+
+Traditional loops have no way to keep going when they hit something
+they can't decide alone. They guess wrong or stop and wait — and if
+you're not at the terminal, "wait" means dead.
+
+**→ perpetuum** makes the human-in-the-loop interaction
+asynchronous. When the agent hits something only you can decide,
+it writes the question down (along with the concrete options it
+considered) and keeps going on everything else; you answer in
+your own time. You can also nudge the running loop with a new
+instruction at any moment without stopping it. Nothing blocks on
+you being at the keyboard.
+
+```
+Today: hit ambiguity → stop and wait synchronously. Human asleep = dead.
+
+   ┌─────────────────────────────────────────────────────────────┐
+   │                                                             │
+   │   start ●──►──►──►─── ⚠️ "A or B?"                            │
+   │                            │                                │
+   │                            │ wait for human                 │
+   │                            ▼                                │
+   │                        ▮ stuck ▮ stuck ▮ ...                │
+   │                                                             │
+   │   human is sleeping / out / busy → task dies here ☠          │
+   │                                                             │
+   └─────────────────────────────────────────────────────────────┘
+
+
+perpetuum: async channels keep the main loop progressing while
+the human's input arrives whenever it arrives.
+
+   Main loop (always progressing):
+
+   cycle 1 ──►──► cycle 2 ──►──► cycle 3 ──►──► cycle N ──►──► ...
+      │              │              │
+      │ ambiguous     │ ambiguous     │ judge rejects
+      │ → write out   │ → write out   │ a bad proposal
+      ▼              ▼              ▼ → no commit happens
+   ╔════════════════════════════════════════════════╗
+   ║  escalations.md   (agent writes; human answers ║
+   ║                    when convenient)             ║
+   ║   ## Open                                       ║
+   ║   - A / B / C ?                                 ║
+   ║   - Pick a naming convention                    ║
+   ║                                                 ║
+   ║   ## Resolved   (you fill in at your own pace)  ║
+   ╚═════════════════════╤═══════════════════════════╝
+                         │
+                         │ you answered
+                         ▼
+   ╔════════════════════════════════════════════════╗
+   ║  inbox.md   (you push instructions in)         ║
+   ║   ## Pending                                    ║
+   ║   - SKIP: postgres                              ║
+   ║   - PRIORITIZE: PR #123                         ║
+   ║   - DIRECTION: focus on auth module             ║
+   ╚═════════════════════╤═══════════════════════════╝
+                         │
+                         │ next cycle's explore phase reads & applies
+                         ▼
+                  cycle N+1 ──►──► ...
+
+       Key:  ambiguity → goes to a queue (loop keeps going)
+             off-track step → judge rejects it; no commit happens
+             human-not-there → that's fine, the loop is async by design
+```
+
+</details>
+
+The three solutions multiply: every cycle stays on-target (P1), the
+time axis extends across triggers and restarts (P2), human input
+arrives async without freezing anything (P3). Together that's what
+"actually perpetual" means in practice.
 
 ## 📦 Installation
 
@@ -276,189 +434,6 @@ Three channels of interaction — pick whichever is easiest:
 Or just tell your host agent: "perpetuum, pause the testing task" /
 "resume" / "skip the postgres tests" — it translates to the file
 operations.
-
-## 🎯 The three core problems, visualized
-
-The three failure modes from the intro, drawn out so the design choices
-are concrete. These three diagrams are the heart of why `perpetuum`
-exists; everything else (the eight ideas below, the comparison table,
-the `cc-use` mechanics) is supporting infrastructure.
-
-### Problem 1 — Goal too vague, operating space too wide → drift
-
-```
-Today (/goal, Ralph Loop): the goal sentence is open to interpretation,
-agent roams a huge unconstrained space.
-
-   ┌──────────────────────────────────────────────────────────────────┐
-   │                                                                  │
-   │     goal: "make this project better" ← user's one sentence,      │
-   │            no metric, no boundary                                │
-   │                                                                  │
-   │   start                                                          │
-   │     ●──►──►──►──╮                                                │
-   │                 ╰──►──►──►──╮                                    │
-   │                             ╰──►──►──►   ❓ off-target           │
-   │                                       ╰──►──►──►──►              │
-   │                                                  ╰──►──►──►──►   │
-   │                                                            ❓❓  │
-   │                                                                  │
-   └──────────────────────────────────────────────────────────────────┘
-       ↑ boundary = the entire interpretive space; nobody steers,
-                    agent goes wherever, however far
-
-
-perpetuum: narrow goal (suitability gate) + Layer 2 plan + Layer 2 judge
-
-   ┌── suitability gate forces a narrow, judgeable goal up front ──┐
-   │                                                               │
-   │         🔍 plan          ⚖️ judge         🔍 plan               │
-   │       (rechecks dir)   (rejects fake)   (rechecks dir)         │
-   │             ▼               ▼                ▼                 │
-   │   start     │               │                │                 │
-   │     ●──►──►─●──►──►──►──►──►●──►──►──►──►──►─●──►──►──►──►─►   │
-   │             ↑               ↑                ↑                 │
-   │      pull back on-target  reject fake     explore new          │
-   │                           progress         direction (safely)  │
-   │                                                                │
-   └────────────────────────────────────────────────────────────────┘
-
-       Key:  the boundary is intentionally narrow,
-             plan re-steers periodically, judge vetoes bad single steps.
-```
-
-### Problem 2 — No continuation: one short run and done
-
-```
-Today: a /goal run is a one-shot. Done = ended.
-
-   ┌──────────────────────────────────────┐
-   │                                      │
-   │  start ●──►──►──►──►──► done/stuck ▮ │
-   │        ╰──── one-shot ────╯           │
-   │                                      │
-   │  then what? nothing. ☠                │
-   │                                      │
-   └──────────────────────────────────────┘
-       ↑ single segment on the time axis. "Find more bugs forever",
-         "fit a metric tighter", "watch for new PRs" → impossible.
-
-
-perpetuum: Layer 3 trigger abstraction stitches "Problem 1's solution"
-across the time axis, indefinitely.
-
-   Triggers (Layer 3):
-
-      ⏰ schedule        🔔 conditional         📨 webhook
-      (every N min)     (poll external state)   (event-driven)
-          │                  │                       │
-          ▼                  ▼                       ▼
-   ┌──────────┐ sleep ┌──────────┐ sleep ┌──────────┐ sleep ┌──────────┐
-   │ ►cycle 1►│ ───── │ ►cycle 2►│ ───── │ ►cycle 3►│ ───── │ ►cycle N►│ ...
-   │ (P1 solv)│       │ (P1 solv)│       │ (P1 solv)│       │ (P1 solv)│
-   │ ratchet ✓│       │ ratchet ✓│       │ ratchet ✓│       │ ratchet ✓│
-   └──────────┘       └──────────┘       └──────────┘       └──────────┘
-        ↓                 ↓                  ↓                  ↓
-        plan.md ←── persisted ←── persisted ←── persisted ←── persisted
-
-       Key:  each cycle = a safe short segment (Problem 1's solution).
-             Concatenated, they form genuine "perpetual" work.
-             Triggers are how cycles know when to start:
-               schedule    → do it more, on a timer
-               conditional → only run when external state changed
-               webhook     → only run on an external event
-```
-
-### Problem 3 — Human-in-the-loop is a wall → ambiguity freezes the run
-
-```
-Today: hit ambiguity → stop and wait synchronously. Human asleep = dead.
-
-   ┌─────────────────────────────────────────────────────────────┐
-   │                                                             │
-   │   start ●──►──►──►─── ⚠️ "A or B?"                            │
-   │                            │                                │
-   │                            │ wait for human                 │
-   │                            ▼                                │
-   │                        ▮ stuck ▮ stuck ▮ ...                │
-   │                                                             │
-   │   human is sleeping / out / busy → task dies here ☠          │
-   │                                                             │
-   └─────────────────────────────────────────────────────────────┘
-
-
-perpetuum: three async channels keep the main loop progressing while
-the human's input arrives whenever it arrives.
-
-   Main loop (Layer 2/3, always progressing):
-
-   cycle 1 ──►──► cycle 2 ──►──► cycle 3 ──►──► cycle N ──►──► ...
-      │              │              │
-      │ ambiguous     │ ambiguous     │ judge rejects Layer 1's
-      │ → write out   │ → write out   │   proposal → no commit
-      ▼              ▼              ▼   ever happens for it
-   ╔════════════════════════════════════════════════╗
-   ║  escalations.md   (agent writes; human answers ║
-   ║                    when convenient)             ║
-   ║   ## Open                                       ║
-   ║   - A / B / C ?                                 ║
-   ║   - Pick a naming convention                    ║
-   ║                                                 ║
-   ║   ## Resolved   (you fill in at your own pace)  ║
-   ╚═════════════════════╤═══════════════════════════╝
-                         │
-                         │ you answered
-                         ▼
-   ╔════════════════════════════════════════════════╗
-   ║  inbox.md   (you push instructions in)         ║
-   ║   ## Pending                                    ║
-   ║   - SKIP: postgres                              ║
-   ║   - PRIORITIZE: PR #123                         ║
-   ║   - DIRECTION: focus on auth module             ║
-   ╚═════════════════════╤═══════════════════════════╝
-                         │
-                         │ next cycle's explore phase reads & applies
-                         ▼
-                  cycle N+1 ──►──► ...
-
-   And one layer up:
-
-   ┌────────────────────────────────────────────────────────────────┐
-   │  Layer 4   you + host coding agent (Claude Code / Codex)       │
-   │  - monitor:  tail trigger.log / tmux -r to watch middle agent  │
-   │  - translate: you say "pause the testing task" / "skip pg"     │
-   │              → agent translates to file operations             │
-   │  - coordinate: read escalations / inbox / plan, surface what   │
-   │              needs your attention                              │
-   └────────────────────────────────────────────────────────────────┘
-
-       Key:  ambiguity → escalations (loop keeps going)
-             off-track step → judge rejects it; no commit happens
-             human-not-there → that's fine, async by design
-```
-
-### How the three solutions compose
-
-```
-                     Problem 1               Problem 2              Problem 3
-                  ┌──────────────┐        ┌─────────────┐        ┌──────────────┐
-   today's /goal: │ wide goal,    │   +    │ one-shot run │   +    │ human = wall  │
-                  │ agent drifts  │        │              │        │              │
-                  └──────────────┘        └─────────────┘        └──────────────┘
-                        │                        │                       │
-                        ▼                        ▼                       ▼
-                  ┌──────────────┐        ┌─────────────┐        ┌──────────────┐
-   perpetuum:     │ narrow goal + │   ×    │ Layer 3      │   ×    │ async escal+  │
-                  │ Layer 2       │        │ schedule/    │        │ inbox + git   │
-                  │ plan + judge  │        │ conditional/ │        │ safety net    │
-                  │               │        │ webhook      │        │               │
-                  └──────────────┘        └─────────────┘        └──────────────┘
-
-   Multiplied together → "actual perpetual":
-     ① every step stays on-target (no drift)
-     ② time axis extends indefinitely (no ending)
-     ③ humans dipping in/out doesn't freeze anything (no wall)
-```
 
 ## 🧬 Supporting ideas (eight building blocks)
 
