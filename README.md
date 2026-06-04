@@ -277,113 +277,147 @@ with you, then launches.
 
 ## 🏗️ Architecture
 
+Four layers, each tied to one of the three problems above. Read the
+right-side tags first — they're the whole point.
+
 ```
-        ┌─────────────────────────────────────────────────────────────────┐
-        │ 👁️ Layer 4   you + host agent — global monitor & control       │
-        │     describe task; watch via `tail` / `tmux -r`; nudge via files│
-        │     pause / resume / stop signals; relay natural-language ops   │
-        └────────────────────────────────┬────────────────────────────────┘
-                                         │ launches
-                                         ▼
-   ↻ ↻ ↻ ┌─────────────────────────────────────────────────────────────────┐
-   ↻     │ ⏰ Layer 3   trigger.sh — heartbeat, loops every cycle ↻        │
-   ↻     │     loop until MAX_ITER or .stop_after_current:                 │
-   ↻     │       check .paused signal                                      │
-   ↻     │       paste prompts/1_explore.md → wait for done flag                   │
-   ↻     │       paste prompts/2_execute.md → wait for done flag                   │
-   ↻     │       sleep SLEEP_BETWEEN_CYCLES                                │
-   ↻ ↻ ↻ │     trigger modes:  schedule  |  conditional  |  webhook        │
-         └────────────────────────────────┬────────────────────────────────┘
-                                          │ pastes prompt into tmux
-                                          ▼
-         ┌─────────────────────────────────────────────────────────────────┐
-         │ 🧠 Layer 2   middle agent — judge + dispatcher (persistent TUI) │
-         │                                                                 │
-         │     ┌─ 🔍 phase 1: EXPLORE ────────────────────────────────┐    │
-         │     │ read plan.md / inbox.md / escalations.md ## Resolved │    │
-         │     │ sample new items (Cartesian product of dimensions)   │    │
-         │     │ append to plan.md ## Pending                         │    │
-         │     └─────────────────────────────────────────────────────┘    │
-         │                                                                 │
-         │     ┌─ ⚖️ phase 2: EXECUTE ────────────────────────────────┐    │
-         │     │ for each Pending item:                                │    │
-         │     │    cc-use delegate ──► Layer 1                        │    │
-         │     │    Layer 1 reports observations back ◄──┐             │    │
-         │     │    judge the report:                    │             │    │
-         │     │       ✅ PASS  → record to plan.md ## Done            │    │
-         │     │       🐛 BUG   → dispatch fix + `git commit` (ratchet)│    │
-         │     │       ❓ AMBIG → escalations.md ## Open (async)       │    │
-         │     └─────────────────────────────────────────────────────┘    │
-         └────────────────────────────────┬───────────────────────┬────────┘
-                                          │ dispatch              ▲
-                                          ▼                       │ report back
-         ┌─────────────────────────────────────────────────────────┴───────┐
-         │ 🤖 Layer 1   inner agent — fresh CC, zero priors                │
-         │     runs the actual operation: CLI command, code read, edit.    │
-         │     observes outcome, returns findings to Layer 2.              │
-         │     no memory of previous cycles → can't rubber-stamp behavior  │
-         └─────────────────────────────────────────────────────────────────┘
+   ┌────────────────────────────────────────────────────────┐
+   │ 👁️  Layer 4   you + host agent (Claude Code / Codex)   │
+   │      describe the task, nudge it, pause, resume, stop  │
+   │      — all in natural language                         │
+   └───────────────────────────┬────────────────────────────┘
+                               │ launches
+                               ▼
+ ↻ ┌────────────────────────────────────────────────────────┐ ──► solves P2
+ ↻ │ ⏰ Layer 3   trigger — heartbeat, loops every cycle    │    "no continuation":
+ ↻ │      schedule  |  conditional  |  webhook              │    time, event, or
+ ↻ │      keeps running until you stop it                   │    condition keeps
+ ↻ └───────────────────────────┬────────────────────────────┘    the loop alive
+                               │ kicks off next cycle
+                               ▼
+   ┌────────────────────────────────────────────────────────┐ ──► solves P1
+   │ 🧠 Layer 2   middle agent — judge + dispatcher         │    "agent drifts":
+   │                                                        │    narrow goal
+   │      🔍 EXPLORE                                        │    + plan / judge
+   │         re-read state · re-check direction             │    split keeps
+   │         queue the next pending items                   │    work on-target
+   │                                                        │
+   │      ⚖️ EXECUTE                                        │
+   │         for each pending item:                         │
+   │            dispatch to Layer 1   ──►                   │
+   │            judge the report:                           │
+   │               ✅ pass   → record + commit              │
+   │               🐛 bug    → fix + commit                 │
+   │               ❓ ambig  → queue for human (no block) ──┼──► solves P3
+   └───────────────────────────┬────────────────────▲───────┘    "human is a wall":
+                               │ dispatch           │ report     ambiguity goes
+                               ▼                    │            to an async queue,
+   ┌────────────────────────────────────────────────┴───────┐    loop keeps going
+   │ 🤖 Layer 1   inner agent — fresh context, zero priors  │
+   │      runs the operation, observes, reports back        │
+   │      no memory of past cycles ⇒ can't self-certify     │
+   └────────────────────────────────────────────────────────┘
 ```
 
-A few design choices in this layout do the most work — these are also
-the answers to "what's the technique behind this?":
-
-- **GAN-like discriminator / generator split** between Layer 2 (judge)
-  and Layer 1 (producer). They share no context — Layer 2 sees the whole
-  history but can't run the work itself; Layer 1 runs the work but can't
-  see history. Neither can fake a result the other would accept. This
-  is what stops the self-certifying problem you see in `/goal` and Ralph
-  Loop, where the same agent both produces and judges.
-- **Monotonic ratchet** via local `git commit`. The middle agent
-  judges each Layer-1 proposal *before* it becomes a commit — rejected
-  ones simply never enter history. Accepted ones land as a `git commit`,
-  giving the branch a clean, append-only progress log that doubles as
-  the durability mechanism across sessions. (Same family of idea as
-  Karpathy's AutoResearch ratchet, with the judge slightly earlier in
-  the loop.)
-- **Exploration vs exploitation as separate prompts.** Phase 1
-  (`prompts/1_explore.md`) is divergent — list new dimensions, sample broadly,
-  populate the backlog. Phase 2 (`prompts/2_execute.md`) is convergent — work
-  through the backlog one item at a time, commit or escalate. Merging
-  them into one prompt is what makes long Ralph-style runs go off the
-  rails.
-- **File-based persistent history** — `plan.md` is the running log of
-  what's been tried, what worked, what was escalated. The middle agent
-  re-reads it every cycle, so context rot can't accumulate and a session
-  can be paused, killed, or relaunched without losing state.
-
-Layer 4 is optional — you can interact with the state files directly.
-The host agent is just a friendlier UI on top of the same file
-contracts.
+Layer 4 is optional — you can drive the state files directly. The
+host agent is just a friendlier UI on top of the same file contracts.
 
 ## 🎮 Using It
 
 After installation, perpetuum is a normal skill. From your coding
-agent's TUI, name it explicitly:
+agent's TUI, name it explicitly and describe what you want it doing
+overnight (or longer):
 
 ```text
-Use perpetuum to watch this repo's GitHub issues and triage new ones
-every hour. I'll review escalations whenever I get to them.
+Use perpetuum to run continuous adversarial testing against this CLI
+for the next 30 cycles. Categories I care about: auth, parser, error
+paths. Open A/B/C when a failure mode is ambiguous.
 ```
 
 ```text
-Use perpetuum to iteratively polish this draft article toward Karpathy's
-writing style. I've put his articles in target_corpus/.
+Use perpetuum to watch this repo's GitHub issues and triage new ones
+every hour. Tag them, suggest labels, escalate only the ones that
+need a product decision.
 ```
 
 ```text
 Use perpetuum to keep finding observability gaps in the worker module
-for ~20 cycles, then stop and let me review.
+for ~20 cycles, then stop and let me review. Commit each gap-fix as
+a separate commit so I can cherry-pick.
 ```
 
-The skill picks the closest example from
+```text
+Use perpetuum to iteratively polish this draft article toward
+Karpathy's writing style. His articles are in target_corpus/. Use BLEU
++ readability + a stylistic-similarity LLM judge as the metric. Stop
+when the metric plateaus for 5 cycles.
+```
+
+```text
+Use perpetuum to watch CI on the main branch. When a build fails,
+diagnose, propose a fix, commit it to a fix/<short-name> branch, and
+open a PR. Don't push to main directly. Run on the webhook trigger.
+```
+
+```text
+Use perpetuum to comb every PR in this repo for security-relevant
+diffs (auth, secrets, network). For each PR write a one-paragraph
+risk note. Run on the conditional trigger — only spin up when a new
+PR arrives.
+```
+
+### Why these tasks fit
+
+The pattern they share:
+
+- **A clear, narrow goal**, not "make this project better".
+- **A judgeable signal** — pass/fail, a number that goes up, a diff
+  someone can review. Without one, the ratchet has nothing to ratchet on.
+- **Many small steps**, not one big atomic delivery — perpetuum's
+  advantage compounds over cycles.
+- **Tolerance for the inner agent being wrong sometimes** — the
+  outer judge catches it, but if a single wrong step is catastrophic
+  (e.g. deploying to prod), this is the wrong tool.
+- **Either the work itself takes a long time, or you want to do a
+  small step many times over many days.** A 10-minute task doesn't
+  need perpetuum; a 10-cycle task across a long weekend does.
+
+### When it's the wrong tool
+
+Don't reach for perpetuum if:
+
+- **One-shot tasks.** "Rename this function across the codebase",
+  "write a regex for this log format" — these are single steps, not
+  loops. Use `/goal` or a normal coding session.
+- **The goal isn't judgeable.** "Make this UI look nicer", "rewrite
+  this in a more elegant way" with no concrete criterion. Without
+  something Layer 2 can grade, fake progress is indistinguishable
+  from real progress.
+- **Every step needs synchronous human input.** Pair-programming on
+  a new feature, exploring a design space together — the whole point
+  of perpetuum is that you're *not* at the terminal. If you would
+  be anyway, just talk to your coding agent directly.
+- **Irreversible actions on every step.** Sending emails to real
+  users, hitting production APIs that charge money, deleting data.
+  perpetuum's ratchet is local — it can roll back a commit, not an
+  email or a charge.
+- **You need the answer in the next 10 minutes.** perpetuum trades
+  wall-clock time for unattended time. If you're waiting, you're
+  using it wrong.
+
+The skill walks you through a suitability gate at init — it will
+push back, or refuse, if your task lands in the second list. It
+also picks the closest example from
 [`examples/`](skills/perpetuum/examples/) (currently:
 `adversarial-testing`, `github-watcher`, `style-distill`,
 `article-polish`, `observability-gap`), customizes the prompts and
-`trigger.sh` for your specific task, walks through a cost/cadence
-check, then launches.
+trigger for your case, walks through a cost/cadence check, then
+launches.
 
-### What the state files actually look like
+<details>
+<summary><b>What the state files actually look like</b></summary>
+
+<br>
 
 ```markdown
 # plan.md   (agent-maintained)
@@ -417,54 +451,124 @@ B: 0-based half-open (matches array semantics in most languages)
 C: leave both, document the discrepancy
 ```
 
+</details>
+
 ### While it's running
 
-Three channels of interaction — pick whichever is easiest:
+Once launched, the task is a black box. You don't need to know which
+layer is doing what; you only need to know which **kinds** of operations
+you can send in, and what comes out.
 
-| You want to… | Do this |
-|---|---|
-| ✍️ Nudge the agent ("focus on X", "skip Y", "PR #123 is urgent") | Append a line to `inbox.md` under `## Pending` |
-| 💬 Answer a question the agent asked | Edit the item in `escalations.md`, add your answer, move to `## Resolved` |
-| 👀 See what's happening right now | `tail -f .perpetuum/<task>/trigger.log` or `tmux attach -t middle-<task> -r` (read-only) |
-| ⏸️ Pause until you've reviewed | `touch .perpetuum/<task>/.paused` |
-| ▶️ Resume | `rm .perpetuum/<task>/.paused` |
-| 🛑 Stop gracefully after current cycle | `touch .perpetuum/<task>/.stop_after_current` |
-| 💥 Kill hard | `pkill -f trigger.sh; tmux kill-session -t middle-<task>` |
+```
+                    ┌──────────────────────────────────────┐
+                    │                                      │
+                    │      ⚫  a perpetuum task running    │ ──► 📜 git commits
+                    │            (the loop, hidden)        │     (the actual work)
+                    │                                      │
+                    └──────────────────────────────────────┘
+                       ▲          ▲           ▲          ▲
+                       │          │           │          │
+                  ✍️ nudge   💬 answer   ⏸️ pause   👀 watch
+                  push new   resolve     ▶️ resume   read-only
+                  direction  open A/B/C  🛑 stop    progress
+                  or skips   questions                    feed
+                       ▲          ▲           ▲          ▲
+                       │          │           │          │
+                       └──────────┴─────┬─────┴──────────┘
+                                        │
+                              all in natural language
+                                        │
+                                        ▼
+                  👤 you ──► 👁️ host agent (Claude Code / Codex / …)
 
-Or just tell your host agent: "perpetuum, pause the testing task" /
-"resume" / "skip the postgres tests" — it translates to the file
-operations.
+           "perpetuum, focus on auth this week"
+           "the off-by-one question — go with option B"
+           "pause until I've looked at the last few commits"
+           "what's it working on right now?"
+           "stop after the current cycle"
+```
 
-## 🧬 Supporting ideas (eight building blocks)
+The host agent translates your sentences into the underlying file
+operations. You never have to remember a flag name or a file path —
+if you can describe the change in plain English, you can drive the
+loop.
 
-The three core problems above are what perpetuum actually solves. The
-implementation borrows from eight related ideas — each individually
-well-known, none combined like this in prior art. They're the
-plumbing that makes the three core mechanisms run reliably; they're
-not themselves the point.
+## 🧬 Design philosophy
 
-1. **Discriminator / Generator separation** (from GANs) — Layer 2
-   judges, Layer 1 generates, they never share context.
-2. **Monotonic ratchet** — every Done becomes a commit; rejected
-   proposals never become commits in the first place, so the branch
-   stays append-only.
-3. **Three-layer architecture** (stupid → smart → stupid) — heartbeat
-   at the top, intelligence in the middle, focused execution at the
-   bottom.
-4. **Exploration vs Exploitation split** — two prompts, one per mental
-   mode. Fused, they confuse each other.
-5. **File-based persistent memory** — plan / inbox / escalations + git
-   log is the entire memory system. Survives sessions, reboots, restarts.
-6. **Asynchronous human escalation** — escalations never block the
-   loop. New cycles run while the human is offline.
-7. **Trigger abstraction** — schedule, conditional, webhook are all
-   valid Layer 3 implementations.
-8. **File-as-contract** — who can edit which file is a convention,
-   not enforcement. Cleaner than role-based access control.
+The three core problems above are what perpetuum solves. To solve
+them it leans on nine deliberate design choices — each individually
+well-known, none combined like this in prior art. These are the
+same nine axes the comparison table below scores every project on,
+in the same order. Read this section, then read the table; the
+table will then read like a checklist instead of a wall of emoji.
+
+1. **Discriminator / Generator separation** (from GANs). Layer 2 is
+   the discriminator — it sees the entire history, judges every
+   proposal, but does not run code itself. Layer 1 is the generator —
+   fresh context every dispatch, runs the actual operation, has no
+   memory of what came before. Because they share no context, neither
+   can fake a result the other would accept. This is what kills the
+   self-certifying failure mode in `/goal` and Ralph Loop.
+
+2. **Monotonic ratchet** via local `git commit`. Layer 2 judges every
+   Layer 1 proposal *before* it becomes a commit — rejected ones
+   never enter history. Accepted ones land as a clean append-only
+   sequence on the branch, and `git log` doubles as the durability
+   mechanism across sessions, machines, and reboots. Without a
+   ratchet, you can't tell progress from noise on a long run.
+
+3. **Three-layer architecture** (dumb → smart → dumb). Layer 3 is
+   intentionally a few hundred lines of bash — no LLM, no judgment,
+   just heartbeat. Layer 2 is the only smart layer. Layer 1 is a
+   fresh-context worker with no opinions of its own. Splitting the
+   smart middle from a dumb-cheap outer wrapper is what keeps the
+   middle agent's context clean over long runs and what makes the
+   loop crash-tolerant.
+
+4. **Exploration vs Exploitation split** at the prompt level.
+   Phase 1 (`prompts/1_explore.md`) is divergent — re-read state,
+   re-check direction, queue new pending items. Phase 2
+   (`prompts/2_execute.md`) is convergent — work down the queue,
+   one item at a time, commit or escalate. Fusing them into one
+   prompt is what makes long Ralph-style runs drift.
+
+5. **File-based persistent memory.** plan / inbox / escalations +
+   the git log are the entire memory system. No vector DB, no
+   embeddings. Layer 2 re-reads these files at the start of every
+   cycle, so context rot stays bounded and state survives any
+   restart — pause at noon, resume at midnight, next cycle picks
+   up exactly where the last one left off.
+
+6. **Asynchronous human escalation.** When Layer 2 hits an ambiguous
+   decision (off-by-one semantics, naming convention, product-call),
+   it writes A/B/C options to `escalations.md ## Open` and *moves
+   on to the next item*. The human answers when convenient; the
+   loop never blocks waiting for a reply. This is what makes
+   "overnight, no synchronous attention" actually work.
+
+7. **Trigger abstraction.** Layer 3 supports three trigger families:
+   schedule (every N minutes), conditional (poll an external state
+   like `gh pr list`), webhook (react to incoming events). All
+   three feed the same Layer 2 / Layer 1 stack — switching trigger
+   doesn't touch the judge or executor.
+
+8. **File-as-contract.** Who can edit which file is a convention,
+   not enforced by code: agent owns `plan.md`, human owns `inbox.md`,
+   both touch `escalations.md` at different sections. Cleaner than
+   role-based access control, debuggable with `cat`, mergeable with
+   `git`.
+
+9. **Host-agnostic dispatch.** Layer 1 is launched through
+   [`cc-use`](https://github.com/zc277584121/cc-use), which speaks
+   either Claude Code or Codex (and 40+ other coding-agent CLIs).
+   The same skill, prompts, file contracts, and trigger logic run
+   identically against whichever host you have installed — a task
+   started under Claude Code can be picked up later under Codex,
+   because the state is just files on disk.
 
 Removing any one of these breaks something. See
 [`skills/perpetuum/references/design.md`](skills/perpetuum/references/design.md)
-for the long-form rationale.
+for the long-form rationale on each.
 
 ## 📊 Comparison with related projects
 
