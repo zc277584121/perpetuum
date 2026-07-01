@@ -25,7 +25,10 @@ Steps:
 1. Read `plan.md` Pending. Process the items planned this cycle.
 
 2. For each, dispatch to the inner agent:
-   - `cc-use delegate --project /<abs-path> --agent claude`
+   - `cc-use delegate --project /<abs-path> --agent claude --replace`
+     (`--replace` forces a fresh inner session; without it `cc-use`
+     reuses the existing `ccu-*` session and Layer 1 quietly
+     accumulates memory across cycles)
    - Task: "Scan `<module>` for `<obs kind>` gaps. For each candidate,
      report: file path, line range, current behavior, what's missing
      (log/metric/span/event), and a suggested addition consistent with
@@ -33,6 +36,9 @@ Steps:
    - **Important:** ask the inner agent to *read existing logs in the
      same module first* to learn the convention before proposing new
      ones. Otherwise you'll get style drift.
+   - Include anything from `plan.md`/`escalations.md` that already
+     bears on this module — Layer 1 has no memory of earlier cycles
+     and only knows what's in this task text.
 
 3. For each finding the inner agent reports, classify:
 

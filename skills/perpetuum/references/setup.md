@@ -101,10 +101,13 @@ For each file in the chosen example:
      append to `plan.md`, write done-flag) but replace the task-specific
      instructions. Use the user's language.
    - **`prompts/2_execute.md`** — adjust the dispatch logic. The
-     `cc-use delegate --project /abs/path --agent <agent-family>` line
-     must use the **absolute path** of the project (or the worktree
+     `cc-use delegate --project /abs/path --agent <agent-family> --replace`
+     line must use the **absolute path** of the project (or the worktree
      path, if using worktrees). `--agent` should match the host
-     coding-CLI agent the user is on (`claude`, `codex`, etc.).
+     coding-CLI agent the user is on (`claude`, `codex`, etc.). Always
+     include `--replace` — without it, `cc-use` reuses the existing
+     inner session by default, which silently breaks Layer 1's
+     zero-priors invariant over the life of the task.
    - **`trigger.sh`** — see `references/trigger.md`. Adjust:
      - `AGENT_CMD` — defaults to Claude Code. For Codex CLI users,
        suggest exporting `AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"`

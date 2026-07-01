@@ -88,6 +88,17 @@ separation** that prevents the self-certifying problem of `/goal` or
 Ralph Loop. Layer 1 reports back to Layer 2; Layer 2 commits, fixes,
 or escalates.
 
+**Fresh context is not the same as no information.** Layer 1 has no
+memory of *previous cycles' conversation* — that's what prevents
+self-certification. But the dispatch prompt for *this* task can and
+should carry whatever this one bounded piece of work needs: relevant
+file paths, a specific instruction, prior decisions from
+`escalations.md` or `plan.md` that constrain this item. Layer 2 holds
+the accumulated picture; it's responsible for writing the necessary
+slice of it into each dispatch's task text. Withholding context isn't
+"more fresh" — it just makes Layer 1 rediscover the same things every
+cycle, or miss a constraint that was already decided.
+
 ## Mechanisms (one paragraph each)
 
 Each mechanism is summarized here; for the full procedure see the
@@ -390,8 +401,10 @@ when adjusting prompts or scripts:
 1. Every accepted finding becomes a local `git commit`.
 2. `plan.md` is agent-maintained; humans route changes through
    `inbox.md`.
-3. Layer 1 always runs in fresh context (per `cc-use` delegate, not a
-   reused inner session within a cycle).
+3. Layer 1 always runs in fresh context. Every `cc-use delegate` call
+   must pass `--replace` — without it, `cc-use` reuses the existing
+   `ccu-*` session by default, which silently gives Layer 1 memory of
+   past cycles and breaks this invariant.
 4. Layer 2's prompts are atomic and lexically ordered; don't fuse
    them.
 5. Sync uses `.cycle_done_*` flag + tmux silence fallback + total

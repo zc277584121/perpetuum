@@ -31,10 +31,17 @@ Walk through these steps:
    a. **Dispatch.** Call `cc-use delegate` with:
       - `--project /<absolute-path-to-project-or-worktree>` (must be absolute!)
       - `--agent claude` (or `codex`, matching the outer agent family)
+      - `--replace` — force a fresh inner session every dispatch.
+        Without it, `cc-use` reuses the existing `ccu-*` session by
+        default, which quietly gives Layer 1 memory of past cycles and
+        breaks the zero-priors guarantee this architecture depends on.
       - The task description: instruct the inner agent to do *ephemeral
         CLI / TUI / SDK operations*, **never** to write persistent unit
         tests. The inner agent should report what it tried, what it
-        observed, and any anomalies.
+        observed, and any anomalies. Include whatever this item
+        specifically needs — relevant file paths, related prior
+        decisions from `escalations.md` — since Layer 1 has no memory
+        of earlier cycles and won't know it otherwise.
 
    b. **Judge.** When the inner agent returns:
       - **Clearly correct behavior** → mark in plan.md as PASS

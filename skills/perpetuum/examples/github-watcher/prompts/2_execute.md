@@ -26,11 +26,17 @@ Steps:
    inner agent. Use `cc-use delegate`:
    - `--project /<absolute-path-to-${REPO}-checkout>`
    - `--agent claude` (or your agent family)
+   - `--replace` — force a fresh inner session every dispatch,
+     otherwise `cc-use` reuses the existing `ccu-*` session and
+     Layer 1 quietly accumulates memory across items/cycles.
    - Task: read PR/issue #N, attempt the relevant investigation
      (reproduce, read diff, check the docs, etc.), report back with:
      - what they found
      - their suggested disposition (fix / comment-and-close / merge-with-tweak / escalate)
      - relevant evidence (file paths, line numbers, error messages)
+     - Include the PR/issue number, repo context, and anything from
+       `escalations.md` that already constrains this item — Layer 1
+       starts with none of that unless it's in this task text.
 
 2. When the inner agent returns, classify:
 

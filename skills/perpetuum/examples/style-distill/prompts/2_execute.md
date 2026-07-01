@@ -35,9 +35,11 @@ Steps:
 > cycle there. The whole point of the three-layer architecture is the
 > fresh-context inner agent; faking it locally defeats the purpose.
    - Dispatch via `cc-use delegate` if the edit is involved
-     (`--project /<abs-path>`, `--agent claude`, task = "rewrite the
-     <section> of draft.md to <intended change>; don't change other
-     sections")
+     (`--project /<abs-path>`, `--agent claude`, `--replace` — forces a
+     fresh inner session; otherwise `cc-use` reuses the existing
+     `ccu-*` session across cycles — task = "rewrite the <section> of
+     draft.md to <intended change>; don't change other sections; here
+     is the target style guidance: <relevant excerpt>")
 
 4. Score the edit:
 
