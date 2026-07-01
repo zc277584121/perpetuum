@@ -630,6 +630,7 @@ for the long-form rationale on each.
 | Codex `/plan` mode | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ |
 | Claude Code [`/goal`](https://code.claude.com/docs/en/goal) | ❌ | ⚠️ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Codex [`/goal`](https://github.com/openai/codex) | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
+| Claude Code [`/loop`](https://code.claude.com/docs/en/scheduled-tasks) | ⚠️ | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
 | [`goalbuddy`](https://github.com/tolibear/goalbuddy) | ❌ | ❌ | ❌ | ⚠️ | ⚠️ | ✅ | ❌ | ✅ | ✅ |
 | [`OpenSpec`](https://github.com/Fission-AI/OpenSpec) | ❌ | ❌ | ❌ | ❌ | ⚠️ | ✅ | ❌ | ✅ | ✅ |
 | [Ralph Loop](https://ghuntley.com/loop/) | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ |
