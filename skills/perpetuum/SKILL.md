@@ -268,10 +268,27 @@ tokens. Don't skip this step.
 - **Poor fit**: one-shot tasks; strongly linear builds; tasks needing
   synchronous human decisions; tasks shorter than ~30 minutes total.
 
-If the task is borderline, reshape it with the user (e.g. turn
-"refactor X" into "scan X module-by-module and surface one smell per
-module"), or recommend a non-perpetuum approach (single agent run,
-one-off `cc-use` dispatch). Full questionnaire in
+Underneath these two heuristics is an internal five-dimension
+checklist (goal narrowness, judgeable signal, step granularity,
+error tolerance, time horizon — full detail in
+`references/setup.md`). **Don't recite this checklist to the user.**
+Instead:
+
+- Check the user's description against all five silently.
+- Ask only about dimensions still unresolved, and only where the
+  answer would actually change the setup (trigger type, cadence,
+  escalation policy, which example to start from). Don't ask a
+  dimension just to have asked it.
+- Ask one at a time, in your own words, fit to the user's task and
+  language. Wait for the answer before asking the next — never queue
+  up several questions in one message.
+- If the user's first message already answers a dimension clearly,
+  don't ask it again.
+
+If the task is still borderline after that, reshape it with the user
+(e.g. turn "refactor X" into "scan X module-by-module and surface one
+smell per module"), or recommend a non-perpetuum approach (single
+agent run, one-off `cc-use` dispatch). Checklist detail in
 `references/setup.md`.
 
 ### 3. Pick an example and create the task directory

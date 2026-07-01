@@ -14,6 +14,42 @@ Before you reach this file, `SKILL.md` already had you confirm:
 If you skipped the suitability gate, go back to `SKILL.md` and walk
 through it now. It is not optional.
 
+## The suitability checklist (internal — don't recite this to the user)
+
+Five dimensions. For each, decide silently whether the user's own
+description already answers it. If not, and if the answer would
+change how the task gets set up, ask about it — one question, in
+your own words, fit to the task and the user's language. Don't read
+this list to the user as a form, and don't ask a dimension whose
+answer wouldn't change anything.
+
+1. **Goal narrowness.** Is there a bounded scope, or is it "make this
+   better" with no boundary? *Unresolved example: "watch for
+   problems" — doesn't say what kind. Ask what categories of finding
+   actually matter here.*
+2. **Judgeable signal.** Is there something Layer 2 can grade —
+   pass/fail, a number that moves, a diff a human could review? *If
+   the user gives no criterion, ask what "done" or "better" looks
+   like for one item.*
+3. **Step granularity.** Does the task decompose into many small,
+   independent units, or is it one atomic delivery? *If it sounds
+   monolithic, ask whether it can be split — module-by-module,
+   PR-by-PR, trial-by-trial.*
+4. **Error tolerance.** Can a wrong Layer-1 step be caught and rolled
+   back (a commit), or is a single mistake catastrophic (prod
+   deploy, real email, money movement)? *If any step sounds
+   irreversible, ask how it should be gated — PR instead of direct
+   push, dry-run instead of a live call, etc.*
+5. **Time horizon.** Does this need to run for hours or days across
+   many cycles, or is it actually a 10-minute task? *If unclear, ask
+   how long they expect this to take, or how many cycles they're
+   picturing.*
+
+Skip any dimension the user's first message already answers clearly.
+Ask the remaining ones one at a time — never all five in one message,
+and stop asking once the borderline cases (see `SKILL.md`) are
+resolved either way.
+
 ## Step 1 — Pick an example as starting point
 
 Look at `examples/` and find the closest match:
