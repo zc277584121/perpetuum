@@ -14,6 +14,7 @@ commands. No new protocol, no message bus, no API.
 | **Paused** | `touch .perpetuum/<task>/.paused` | `rm .perpetuum/<task>/.paused` |
 | **Stopped (graceful)** | `touch .perpetuum/<task>/.stop_after_current` | (process exits naturally; relaunch trigger.sh to resume) |
 | **Killed (hard)** | `pkill -f trigger.sh` then `tmux kill-session -t middle-<task>` | relaunch trigger.sh |
+| **Done (full cleanup)** | see below | can't — this is the end of this task's line |
 
 ## What each one actually does
 
@@ -53,6 +54,34 @@ re-does a small piece of work.
 
 Use case: "Something is wrong, just stop." (Or: process is wedged.)
 
+### Done (full cleanup)
+
+Both Pause/Stop and Kill deliberately leave the middle CC TUI and the
+inner `cc-use` session alive in tmux — that's cheap-resume-by-design,
+not an oversight, for when the user might come back to this task or
+this project. But nothing so far actually tears those down when the
+user is genuinely finished — this is a distinct state, not just a
+harder version of "kill":
+
+```bash
+pkill -f trigger.sh
+tmux kill-session -t middle-<task>
+tmux kill-session -t ccu-<project-name>   # cc-use's Layer 1 session — same
+                                           # derivation cc-use itself uses:
+                                           # session_name_for_project(project, agent)
+```
+
+**Only kill the `ccu-*` session if you're sure nothing else needs that
+project's inner session for continuity** — `cc-use`'s own default is to
+keep it alive indefinitely across unrelated future work on the same
+project (see its own SKILL.md: "Do not kill the inner session at
+routine task completion"). If the user has other tasks or ad hoc
+`cc-use` usage on the same project, leave it and only kill the middle
+session.
+
+Use case: "This task is done for good — PR merged, moving on, clean up
+everything." Not the same as "pause" or "stop for now."
+
 ## Natural language mapping
 
 When the user talks to you ("Layer 4"), translate their language into
@@ -64,6 +93,7 @@ the right command. Map liberally:
 | resume / keep going / start again | `rm .paused` |
 | stop after this round / wrap up | `touch .stop_after_current` |
 | kill it / force stop | `pkill -f trigger.sh; tmux kill-session -t middle-<task>` |
+| I'm done with this for good / clean everything up | full cleanup — see "Done (full cleanup)" above; confirm before killing the `ccu-*` session, it may be shared with other work on the same project |
 | start again / relaunch | `nohup .perpetuum/<task>/trigger.sh > /dev/null 2>&1 &` |
 | is it paused? / is it running? | check both: `ls .paused 2>/dev/null` and `pgrep -f trigger.sh` |
 
