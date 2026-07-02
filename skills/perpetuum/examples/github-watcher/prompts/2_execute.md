@@ -23,12 +23,15 @@ the inner agent finds and decide what to commit / comment / escalate.**
 Steps:
 
 1. For each Pending item this cycle, dispatch a focused task to the
-   inner agent. Use `cc-use delegate`:
-   - `--project /<absolute-path-to-${REPO}-checkout>`
-   - `--agent claude` (or your agent family)
-   - `--replace` — force a fresh inner session every dispatch,
-     otherwise `cc-use` reuses the existing `ccu-*` session and
-     Layer 1 quietly accumulates memory across items/cycles.
+   inner agent via the `cc-use` skill. Require, in plain language (not
+   specific CLI flags — cc-use's own `SKILL.md` decides how it
+   satisfies these, and that can change independently of perpetuum):
+   - the project at `/<absolute-path-to-${REPO}-checkout>` — must be
+     absolute
+   - the agent family matching the outer agent (`claude`, `codex`, etc.)
+   - a **fresh, no-memory inner session** every dispatch — never a
+     reused one, which would quietly let Layer 1 accumulate memory
+     across items/cycles
    - Task: read PR/issue #N, attempt the relevant investigation
      (reproduce, read diff, check the docs, etc.), report back with:
      - what they found

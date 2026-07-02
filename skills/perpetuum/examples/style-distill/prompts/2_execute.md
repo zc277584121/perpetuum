@@ -34,12 +34,15 @@ Steps:
 > blocked-on-environment escalation to `escalations.md` and stop the
 > cycle there. The whole point of the three-layer architecture is the
 > fresh-context inner agent; faking it locally defeats the purpose.
-   - Dispatch via `cc-use delegate` if the edit is involved
-     (`--project /<abs-path>`, `--agent claude`, `--replace` — forces a
-     fresh inner session; otherwise `cc-use` reuses the existing
-     `ccu-*` session across cycles — task = "rewrite the <section> of
-     draft.md to <intended change>; don't change other sections; here
-     is the target style guidance: <relevant excerpt>")
+   - Dispatch via the `cc-use` skill if the edit is involved. Require,
+     in plain language (not specific CLI flags — cc-use's own
+     `SKILL.md` decides how it satisfies these): the project at
+     `/<abs-path>` (absolute), the agent family matching the outer
+     agent, and a **fresh, no-memory inner session** every dispatch —
+     never a reused one, which would quietly carry over memory across
+     cycles. Task = "rewrite the <section> of draft.md to <intended
+     change>; don't change other sections; here is the target style
+     guidance: <relevant excerpt>"
 
 4. Score the edit:
 

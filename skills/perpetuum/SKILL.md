@@ -311,8 +311,14 @@ customize:
 
 - `prompts/1_explore.md` — replace generic dimension hints with this
   project's actual axes; use the user's language
-- `prompts/2_execute.md` — set the `--project` absolute path; adjust
-  commit-style and classification policy to the project
+- `prompts/2_execute.md` — set the project's absolute path; adjust
+  commit-style and classification policy to the project. Describe
+  dispatching to Layer 1 as a *requirement* ("fresh, no-memory inner
+  session"), not a specific `cc-use` CLI invocation — its exact flags
+  can drift out of sync with what's actually written here. If a
+  specific extra skill (beyond `cc-use`) would materially help this
+  task, note that too — ask adaptively, see
+  `references/setup.md` → "Recommending extra skills"
 - `trigger.sh` — set `MIDDLE_SESSION` to something unique, adjust
   `MAX_ITER`, decide trigger type (schedule / conditional / webhook).
   The script also reads an `AGENT_CMD` env var: default is Claude Code,
@@ -402,10 +408,14 @@ when adjusting prompts or scripts:
 1. Every accepted finding becomes a local `git commit`.
 2. `plan.md` is agent-maintained; humans route changes through
    `inbox.md`.
-3. Layer 1 always runs in fresh context. Every `cc-use delegate` call
-   must pass `--replace` — without it, `cc-use` reuses the existing
-   `ccu-*` session by default, which silently gives Layer 1 memory of
-   past cycles and breaks this invariant.
+3. Layer 1 always runs in fresh context. Every dispatch to Layer 1
+   must request a fresh, no-memory inner session — never one reused
+   from a prior cycle, which would silently give Layer 1 memory of
+   past cycles. Achieve this via `cc-use`'s own documented mechanism,
+   not a flag hardcoded into perpetuum's prompts — that mechanism can
+   change independently of perpetuum, so `2_execute.md` should state
+   the requirement in plain language and let `cc-use`'s `SKILL.md` be
+   the authority on how to satisfy it.
 4. Layer 2's prompts are atomic and lexically ordered; don't fuse
    them.
 5. Sync uses `.cycle_done_*` flag + tmux silence fallback + total

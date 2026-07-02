@@ -28,13 +28,18 @@ Walk through these steps:
 
 2. For each picked item:
 
-   a. **Dispatch.** Call `cc-use delegate` with:
-      - `--project /<absolute-path-to-project-or-worktree>` (must be absolute!)
-      - `--agent claude` (or `codex`, matching the outer agent family)
-      - `--replace` — force a fresh inner session every dispatch.
-        Without it, `cc-use` reuses the existing `ccu-*` session by
-        default, which quietly gives Layer 1 memory of past cycles and
-        breaks the zero-priors guarantee this architecture depends on.
+   a. **Dispatch.** Use the `cc-use` skill to delegate this item.
+      Require, in plain language, not as specific CLI flags (cc-use's
+      own `SKILL.md` is the authority on how it satisfies these — don't
+      hardcode a flag name here, it can drift out of sync):
+      - the project (or worktree) at `/<absolute-path>` — must be
+        absolute
+      - the agent family matching the outer agent (`claude`, `codex`,
+        etc.)
+      - a **fresh, no-memory inner session** every dispatch — never a
+        reused one, which would quietly give Layer 1 memory of past
+        cycles and break the zero-priors guarantee this architecture
+        depends on
       - The task description: instruct the inner agent to do *ephemeral
         CLI / TUI / SDK operations*, **never** to write persistent unit
         tests. The inner agent should report what it tried, what it

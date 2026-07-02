@@ -50,6 +50,36 @@ Ask the remaining ones one at a time — never all five in one message,
 and stop asking once the borderline cases (see `SKILL.md`) are
 resolved either way.
 
+## Recommending extra skills for Layer 1 / Layer 2 (ask adaptively — not every task needs this)
+
+Layer 1 (the `cc-use`-dispatched inner agent) and Layer 2 (the
+middle agent in the `tmux` session) are both real, running agent
+instances — they get whatever skills are installed and visible in
+their environment, the same way any other session would. Most of the
+time this needs no attention: skills are typically installed globally
+and shared across sessions, and a well-described skill gets picked up
+by the normal skill-matching an agent already does on its own. Don't
+turn this into a mandatory setup question.
+
+Ask about it only when the task shape makes it plausible that a
+*specific* non-default skill would materially change the outcome, and
+it's not obvious the agent will reliably reach for the right one on
+its own — e.g. several candidate skills could plausibly match the same
+description (which one does the user actually want?), or a skill needs
+a usage detail only the user knows (a specific flag, account, or mode),
+or Layer 1 runs as a different agent family than Layer 2 (`--agent
+codex` dispatched from a Claude Code Layer 2) and so may not share the
+same globally-visible skill set. If none of that applies, don't ask —
+default behavior (whatever's already installed, matched by the agent's
+normal skill discovery) is fine.
+
+If the user does name something, record which skill applies to which
+layer (Layer 1, Layer 2, or both) — write it into the copied
+`prompts/1_explore.md` / `prompts/2_execute.md` during Step 5 below as
+a one-line pointer ("if the `<skill>` skill is available, prefer it
+for `<X>`"), the same way project-specific dimension hints already get
+written in. This is a content edit to the prompt, not a new mechanism.
+
 ## Step 1 — Pick an example as starting point
 
 Look at `examples/` and find the closest match:
@@ -100,14 +130,21 @@ For each file in the chosen example:
      scope. Use the example's structure (read history, plan new items,
      append to `plan.md`, write done-flag) but replace the task-specific
      instructions. Use the user's language.
-   - **`prompts/2_execute.md`** — adjust the dispatch logic. The
-     `cc-use delegate --project /abs/path --agent <agent-family> --replace`
-     line must use the **absolute path** of the project (or the worktree
-     path, if using worktrees). `--agent` should match the host
-     coding-CLI agent the user is on (`claude`, `codex`, etc.). Always
-     include `--replace` — without it, `cc-use` reuses the existing
-     inner session by default, which silently breaks Layer 1's
-     zero-priors invariant over the life of the task.
+   - **`prompts/2_execute.md`** — adjust the dispatch instructions to
+     name the **absolute path** of the project (or worktree path) and
+     which agent family Layer 1 should run as (matching the host
+     coding-CLI agent the user is on — `claude`, `codex`, etc.).
+     Describe the dispatch as a **requirement** — "a fresh, no-memory
+     inner session, never a reused one" — not as a specific CLI
+     invocation with flags. `cc-use` is a skill, not a CLI the middle
+     agent shells out to; exactly how it guarantees a fresh session is
+     defined by cc-use's own `SKILL.md`, which can change independently
+     of perpetuum. Hardcoding a flag name (e.g. `--replace`) into this
+     prompt risks it silently going stale if cc-use's interface moves —
+     that exact drift has already broken Layer 1's zero-priors
+     invariant once in practice. If a step earlier surfaced a specific
+     extra skill worth pointing Layer 1 or Layer 2 at, add that here
+     too — see "Recommending extra skills" above.
    - **`trigger.sh`** — see `references/trigger.md`. Adjust:
      - `AGENT_CMD` — defaults to Claude Code. For Codex CLI users,
        suggest exporting `AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"`

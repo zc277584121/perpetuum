@@ -24,11 +24,15 @@ Steps:
 
 1. Read `plan.md` Pending. Process the items planned this cycle.
 
-2. For each, dispatch to the inner agent:
-   - `cc-use delegate --project /<abs-path> --agent claude --replace`
-     (`--replace` forces a fresh inner session; without it `cc-use`
-     reuses the existing `ccu-*` session and Layer 1 quietly
-     accumulates memory across cycles)
+2. For each, dispatch to the inner agent via the `cc-use` skill.
+   Require, in plain language (not specific CLI flags — cc-use's own
+   `SKILL.md` decides how it satisfies these, and that can change
+   independently of perpetuum):
+   - the project at `/<abs-path>` — must be absolute
+   - the agent family matching the outer agent (`claude`, `codex`, etc.)
+   - a **fresh, no-memory inner session** every dispatch — never a
+     reused one, which would quietly let Layer 1 accumulate memory
+     across cycles
    - Task: "Scan `<module>` for `<obs kind>` gaps. For each candidate,
      report: file path, line range, current behavior, what's missing
      (log/metric/span/event), and a suggested addition consistent with
