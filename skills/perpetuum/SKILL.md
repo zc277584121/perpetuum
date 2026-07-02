@@ -66,6 +66,7 @@ before doing anything.
 | Parallel lines via git worktree | `references/worktree.md` |
 | Write or adjust `trigger.sh` | `references/trigger.md` |
 | Understand the design rationale | `references/design.md` |
+| See/watch a task visually, in a browser | `references/dashboard.md` — **ask before setting it up**, it's optional |
 
 ## How it works (architecture in one screen)
 
