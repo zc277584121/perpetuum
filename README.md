@@ -121,6 +121,17 @@ fires), or react to incoming events. The same loop persists
 across sessions, restarts, days — pick whatever trigger matches
 the work.
 
+But a trigger that fires into an empty queue is just a heartbeat
+with nothing to do — perpetual *timing* isn't perpetual *substance*.
+That's the other half of the mechanism, easy to miss: every cycle's
+**explore** phase doesn't just recheck direction, it appends
+newly-discovered work to `plan.md`'s Pending list — new test angles,
+new follow-ups, new edge cases the last cycle's result surfaced. So
+execution both drains the queue and refills it in the same breath.
+Without that, a trigger firing on schedule forever would just
+rediscover an empty todo list a few cycles in and idle — "still
+running" but with nothing left to do.
+
 ```
 Today: a /goal run is a one-shot. Done = ended.
 
@@ -160,6 +171,9 @@ indefinitely, on whichever kind of trigger fits the work.
                schedule    → do it more, on a timer
                conditional → only run when external state changed
                webhook     → only run on an external event
+             plan.md isn't just read each cycle, it's refilled: explore
+             adds new Pending items as fast as execute drains them —
+             the trigger keeps *timing* perpetual, this keeps it *fed*.
 ```
 
 </details>
@@ -573,14 +587,28 @@ in the same order.
    re-check direction, queue new pending items. Phase 2
    (`prompts/2_execute.md`) is convergent — work down the queue,
    one item at a time, commit or escalate. Fusing them into one
-   prompt is what makes long Ralph-style runs drift.
+   prompt is what makes long Ralph-style runs drift — but it's also
+   what keeps the run *perpetual* in substance, not just in timing:
+   Phase 1 adds to `plan.md`'s Pending list every cycle, Phase 2
+   drains it, so the backlog is replenished as fast as it's consumed
+   instead of running dry a few cycles into a long trigger schedule.
 
-6. **File-based persistent memory.** plan / inbox / escalations +
-   the git log are the entire memory system. No vector DB, no
-   embeddings. Layer 2 re-reads these files at the start of every
-   cycle, so context rot stays bounded and state survives any
-   restart — pause at noon, resume at midnight, next cycle picks
-   up exactly where the last one left off.
+6. **File-based persistent memory, no vector DB required for the
+   loop's own state.** plan / inbox / escalations + the git log are
+   the entire memory system Layer 2 needs to keep the loop itself
+   running — this working set is small enough to re-read in full
+   every cycle, so it never needs an embedding store. Layer 2
+   re-reads these files at the start of every cycle, so context rot
+   stays bounded and state survives any restart — pause at noon,
+   resume at midnight, next cycle picks up exactly where the last
+   one left off.
+
+   If you want the explore phase to also draw on a much larger pool
+   of history — this person's past decisions and style across other
+   work, not just this loop's own backlog — that's a different,
+   optional layer. A memory-search tool with vector retrieval (e.g.
+   [MemSearch](https://github.com/zilliztech/memsearch)) can plug in
+   alongside the file-based core for that, not instead of it.
 
 7. **Architectural decoupling and responsibility separation.** Each
    layer owns one well-defined job: Layer 3 owns "keep ticking",
@@ -638,7 +666,7 @@ for the long-form rationale on each.
 | [Karpathy AutoResearch](https://github.com/karpathy/autoresearch) | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ |
 | [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954) | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | [EvoSkills](https://arxiv.org/abs/2604.01687) | ❌ | ❌ | ❌ | ✅ | ⚠️ | ⚠️ | ❌ | ⚠️ | ❌ |
-| nuwa-skill / [persona](https://github.com/migueldeguzman/persona) | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
+| [`nuwa-skill`](https://github.com/alchaincyf/nuwa-skill) | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | ⚠️ | ❌ | ❌ | ✅ |
 | **`perpetuum`** (this) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 `perpetuum` is the only one with every column checked — the

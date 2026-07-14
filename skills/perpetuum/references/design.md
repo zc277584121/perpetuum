@@ -130,7 +130,7 @@ make the three solutions practical to run.
 | 2 | Monotonic ratchet | Every Done item is a commit. plan.md `[x]` is append-only by convention. **Safety net for P3 (off-track steps undone silently).** |
 | 3 | Three-layer architecture (stupid → smart → stupid) | trigger.sh is dumb, middle is smart, inner is dumb. **The structural shape of P1 + P3 together.** |
 | 4 | Exploration vs Exploitation prompt split | `prompts/1_explore.md` plans, `prompts/2_execute.md` does. **Implements P1's plan half.** |
-| 5 | File-based persistent memory | plan.md + inbox.md + escalations.md + git log. No vector DB, no embeddings. **Enables P2 (state survives triggered cycles) and P3 (async channels are just files).** |
+| 5 | File-based persistent memory | plan.md + inbox.md + escalations.md + git log. No vector DB needed for this working set — small enough to re-read in full each cycle. Optional vector-retrieval memory (e.g. [MemSearch](https://github.com/zilliztech/memsearch)) can plug in alongside it for broader personal history. **Enables P2 (state survives triggered cycles) and P3 (async channels are just files).** |
 | 6 | Asynchronous human escalation | escalations.md never blocks the loop. New cycles still run. **Implements P3's escalations channel.** |
 | 7 | Trigger abstraction | schedule / conditional / webhook are all valid Layer 3 implementations. Same Layer 2/1. **Implements P2.** |
 | 8 | File-as-contract | Who can edit which file is a convention, not enforcement. Cleaner than role-based access. **Makes P3's shared-file channels safe in practice.** |
