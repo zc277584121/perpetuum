@@ -1,7 +1,7 @@
 # perpetuum ♾️
 
-> A perpetual-motion engine for coding agents — production-grade,
-> not a thought experiment.
+> Loop engineering for coding agents, done production-grade — a
+> perpetual-motion engine, not a thought experiment.
 
 > 🧬 **What this actually is — a Skill, not a script.** `perpetuum`
 > ships as an [Agent Skill](https://skills.sh): a small set of
@@ -24,6 +24,10 @@ and just stops, or it drifts off the main thread and keeps needing you
 to step in for decisions.
 
 That's not perpetual. That's just "unattended for 20 minutes."
+
+Designing a system that actually holds up — instead of just wiring a
+prompt to a scheduler — is what people are starting to call **loop
+engineering**. Most attempts at it stop at exactly this wall.
 
 `perpetuum` is what lets your coding agent **actually keep running —
 truly, perpetually, until you tell it to stop.** It works while you
@@ -650,7 +654,7 @@ Removing any one of these breaks something. See
 [`skills/perpetuum/references/design.md`](skills/perpetuum/references/design.md)
 for the long-form rationale on each.
 
-## 📊 Comparison with related projects
+## 📊 Loop engineering: comparison with related projects
 
 | Project | trigger abstraction | disc/gen split | async human | ratchet | explore/exploit split | persistent memory | multi-layer | file contract | Claude+Codex |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -662,6 +666,7 @@ for the long-form rationale on each.
 | [`goalbuddy`](https://github.com/tolibear/goalbuddy) | ❌ | ❌ | ❌ | ⚠️ | ⚠️ | ✅ | ❌ | ✅ | ✅ |
 | [`OpenSpec`](https://github.com/Fission-AI/OpenSpec) | ❌ | ❌ | ❌ | ❌ | ⚠️ | ✅ | ❌ | ✅ | ✅ |
 | [Ralph Loop](https://ghuntley.com/loop/) | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ |
+| [`loop-engineering`](https://github.com/cobusgreyling/loop-engineering) | ✅ | ⚠️ | ⚠️ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | ✅ |
 | [`recursive-improve`](https://github.com/kayba-ai/recursive-improve) | ❌ | ❌ | ❌ | ✅ | ❌ | ⚠️ | ❌ | ❌ | ❌ |
 | [Karpathy AutoResearch](https://github.com/karpathy/autoresearch) | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ |
 | [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954) | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
