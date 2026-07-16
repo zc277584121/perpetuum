@@ -134,17 +134,15 @@ For each file in the chosen example:
      name the **absolute path** of the project (or worktree path) and
      which agent family Layer 1 should run as (matching the host
      coding-CLI agent the user is on — `claude`, `codex`, etc.).
-     Describe the dispatch as a **requirement** — "a fresh, no-memory
-     inner session, never a reused one" — not as a specific CLI
-     invocation with flags. `cc-use` is a skill, not a CLI the middle
-     agent shells out to; exactly how it guarantees a fresh session is
-     defined by cc-use's own `SKILL.md`, which can change independently
-     of perpetuum. Hardcoding a flag name (e.g. `--replace`) into this
-     prompt risks it silently going stale if cc-use's interface moves —
-     that exact drift has already broken Layer 1's zero-priors
-     invariant once in practice. If a step earlier surfaced a specific
-     extra skill worth pointing Layer 1 or Layer 2 at, add that here
-     too — see "Recommending extra skills" above.
+     Dispatching to Layer 1 must be a **hard fresh-start requirement**:
+     with the current `cc-use` helper, the dispatch must require
+     `--replace` on every `delegate` call so the existing `ccu-*`
+     session is not reused. If `cc-use` changes its fresh-start
+     mechanism later, update the prompt and this setup guide in the same
+     change. Do not leave this as plain-language guidance only; Layer 2
+     must have an enforceable instruction. If a step earlier surfaced a
+     specific extra skill worth pointing Layer 1 or Layer 2 at, add that
+     here too — see "Recommending extra skills" above.
    - **`trigger.sh`** — see `references/trigger.md`. Adjust:
      - `AGENT_CMD` — defaults to Claude Code. For Codex CLI users,
        suggest exporting `AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"`

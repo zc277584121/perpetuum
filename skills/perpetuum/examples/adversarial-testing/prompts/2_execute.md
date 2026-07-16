@@ -29,9 +29,7 @@ Walk through these steps:
 2. For each picked item:
 
    a. **Dispatch.** Use the `cc-use` skill to delegate this item.
-      Require, in plain language, not as specific CLI flags (cc-use's
-      own `SKILL.md` is the authority on how it satisfies these — don't
-      hardcode a flag name here, it can drift out of sync):
+      Require:
       - the project (or worktree) at `/<absolute-path>` — must be
         absolute
       - the agent family matching the outer agent (`claude`, `codex`,
@@ -40,6 +38,10 @@ Walk through these steps:
         reused one, which would quietly give Layer 1 memory of past
         cycles and break the zero-priors guarantee this architecture
         depends on
+      - with the current `cc-use` helper, that fresh-start requirement
+        means every `delegate` call must use `--replace`; if `cc-use`
+        later changes its fresh-start mechanism, use the documented
+        replacement mechanism and update this prompt
       - The task description: instruct the inner agent to do *ephemeral
         CLI / TUI / SDK operations*, **never** to write persistent unit
         tests. The inner agent should report what it tried, what it

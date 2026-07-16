@@ -25,13 +25,19 @@ Steps:
 > cycle there. The whole point of the three-layer architecture is the
 > fresh-context inner agent; faking it locally defeats the purpose.
 3. Apply the edit. Either directly or via cc-use dispatch (preferred
-   for non-trivial edits — the fresh inner agent has no priors).
+   for non-trivial edits — the fresh inner agent has no priors). If you
+   dispatch, require a fresh, no-memory inner session. With the current
+   `cc-use` helper, that means every `delegate` call must use
+   `--replace`; if `cc-use` later changes its fresh-start mechanism,
+   use the documented replacement mechanism and update this prompt.
 
 4. Save the new text as `AFTER_TEXT`.
 
 5. **Blind judge** via a separate cc-use dispatch. This is the
    discriminator. The fresh inner agent has no context of what edit
-   was made. Ask:
+   was made. This dispatch also requires a fresh, no-memory session;
+   with the current `cc-use` helper, every `delegate` call must use
+   `--replace`. Ask:
 
    > Here are two versions of the same paragraph from an article about
    > [topic]. Label them A and B in random order (you decide which is
