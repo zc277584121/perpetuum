@@ -22,8 +22,9 @@ commands. No new protocol, no message bus, no API.
 
 `trigger.sh` finishes the *current cycle* (does not interrupt mid-cycle
 — prompts in flight complete normally), then enters a polling loop
-that checks for `.paused` every 60 seconds. The middle CC TUI stays
-alive in tmux, the inner cc-use session stays alive. Nothing is lost.
+that checks for `.paused` every 60 seconds. The per-cycle middle CC TUI
+is normally cleaned up at cycle end; state is preserved in files. Nothing
+is lost.
 
 Resume removes the flag; on the next poll trigger.sh proceeds to the
 next cycle. **Resume costs nothing.**
@@ -34,13 +35,12 @@ items before the next cycle picks them up."
 ### Stop (graceful)
 
 `trigger.sh` finishes the current cycle, checks the flag, exits
-cleanly. The middle CC TUI and inner cc-use session are still alive
-in tmux (they don't know trigger.sh stopped). plan.md / escalations.md
-are in a clean state because the cycle finished.
+cleanly. The per-cycle middle CC TUI is normally killed at cycle end.
+`plan.md` / `escalations.md` are in a clean state because the cycle
+finished.
 
-To resume: just run `trigger.sh` again. It will reuse the middle
-session if it's still there, otherwise start a fresh one. State is
-in files; it picks up where it left off.
+To resume: just run `trigger.sh` again. State is in files; it picks up
+where it left off and starts a fresh middle session for the next cycle.
 
 Use case: "I'm done for the week, stop cleanly. I'll restart
 Monday."
@@ -56,12 +56,11 @@ Use case: "Something is wrong, just stop." (Or: process is wedged.)
 
 ### Done (full cleanup)
 
-Both Pause/Stop and Kill deliberately leave the middle CC TUI and the
-inner `cc-use` session alive in tmux — that's cheap-resume-by-design,
-not an oversight, for when the user might come back to this task or
-this project. But nothing so far actually tears those down when the
-user is genuinely finished — this is a distinct state, not just a
-harder version of "kill":
+Normal cycles kill the middle CC TUI after each cycle, but hard stops,
+crashes, or manual experiments can still leave stale middle or inner
+`cc-use` sessions in tmux. Full cleanup removes those leftovers when the
+user is genuinely finished — this is a distinct state, not just a harder
+version of "kill":
 
 ```bash
 pkill -f trigger.sh
@@ -74,10 +73,8 @@ tmux kill-session -t ccu-<project-name>   # cc-use's Layer 1 session — same
 **Only kill the `ccu-*` session if you're sure nothing else needs that
 project's inner session for continuity** — `cc-use`'s own default is to
 keep it alive indefinitely across unrelated future work on the same
-project (see its own SKILL.md: "Do not kill the inner session at
-routine task completion"). If the user has other tasks or ad hoc
-`cc-use` usage on the same project, leave it and only kill the middle
-session.
+project. If the user has other tasks or ad hoc `cc-use` usage on the
+same project, leave it and only kill stale middle sessions.
 
 Use case: "This task is done for good — PR merged, moving on, clean up
 everything." Not the same as "pause" or "stop for now."

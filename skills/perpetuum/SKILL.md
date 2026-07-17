@@ -73,9 +73,9 @@ before doing anything.
 ```
 Layer 4   you + host agent     monitor + relay (optional)
    ↓
-Layer 3   trigger.sh           heartbeat: paste prompts, wait for done
-   ↓                                       flags, sleep, loop
-Layer 2   middle agent (tmux)  judge + dispatch, two prompts:
+Layer 3   trigger.sh           persistent scheduler: start fresh Layer 2,
+   ↓                                       paste prompts, wait, clean up
+Layer 2   middle agent (tmux)  fresh per cycle; judge + dispatch:
    ↕                                       1_explore.md  (plan)
                                            2_execute.md  (dispatch + judge)
 Layer 1   inner agent          fresh context per dispatch — has no
@@ -84,21 +84,23 @@ Layer 1   inner agent          fresh context per dispatch — has no
 ```
 
 The split between Layer 1 (producer, fresh context) and Layer 2 (judge,
-persistent context) is the **GAN-like discriminator / generator
+fresh-per-cycle context) is the **GAN-like discriminator / generator
 separation** that prevents the self-certifying problem of `/goal` or
 Ralph Loop. Layer 1 reports back to Layer 2; Layer 2 commits, fixes,
-or escalates.
+or escalates. Layer 3 is the persistent scheduler; durable memory lives
+in files and git, not in a long-lived Layer 2 TUI conversation.
 
 **Fresh context is not the same as no information.** Layer 1 has no
 memory of *previous cycles' conversation* — that's what prevents
 self-certification. But the dispatch prompt for *this* task can and
 should carry whatever this one bounded piece of work needs: relevant
 file paths, a specific instruction, prior decisions from
-`escalations.md` or `plan.md` that constrain this item. Layer 2 holds
-the accumulated picture; it's responsible for writing the necessary
-slice of it into each dispatch's task text. Withholding context isn't
-"more fresh" — it just makes Layer 1 rediscover the same things every
-cycle, or miss a constraint that was already decided.
+`escalations.md` or `plan.md` that constrain this item. Layer 2 rebuilds
+the accumulated picture by re-reading those files at the start of each
+cycle; it's responsible for writing the necessary slice of it into each
+dispatch's task text. Withholding context isn't "more fresh" — it just
+makes Layer 1 rediscover the same things every cycle, or miss a
+constraint that was already decided.
 
 ## Mechanisms (one paragraph each)
 
@@ -133,15 +135,17 @@ linked reference.
 
 - **Trigger abstraction.** Three trigger types — `schedule` (every N
   minutes), `conditional` (poll an external state like `gh pr list`),
-  `webhook` (event-driven). Same Layer 2 and Layer 1; only Layer 3
-  differs. Default in examples is `schedule` with a 2-minute interval —
-  see cost note below. Details in `references/trigger.md`.
+  `webhook` (event-driven). They share the same per-cycle Layer 2 and
+  Layer 1 contract; only Layer 3's wake-up condition differs. Default in
+  examples is `schedule` with a 2-minute interval — see cost note below.
+  Details in `references/trigger.md`.
 
 - **Control signals.** `touch .paused` / `rm .paused` to pause and
   resume; `touch .stop_after_current` to gracefully stop after the
   current cycle; `pkill -f trigger.sh` + `tmux kill-session` for hard
-  stop. File-level signals, no new protocol. Details in
-  `references/control.md`.
+  stop. Layer 2 is normally killed after each cycle, but cleanup commands
+  still include the fixed middle tmux session name for stale sessions.
+  File-level signals, no new protocol. Details in `references/control.md`.
 
 - **Parallel lines via git worktree.** For several perpetuum tasks
   on the same project, use `git worktree add` so each task gets its
@@ -263,8 +267,8 @@ either is missing.
   restart. Follow that agent's docs.
 
 - **`tmux`** must be installed locally. Verify with `tmux -V`. The
-  middle agent (Layer 2) lives in a persistent tmux session for the
-  duration of the task.
+  middle agent (Layer 2) runs in a tmux session that Layer 3 recreates
+  for each cycle, using a fixed per-task session name.
 
 If `cc-use` is missing, ask the user whether to install it. If `tmux`
 is missing, point them to their package manager and stop — perpetuum
@@ -321,13 +325,19 @@ customize:
   skill (beyond `cc-use`) would materially help this task, note that
   too — ask adaptively, see `references/setup.md` → "Recommending extra
   skills"
-- `trigger.sh` — set `MIDDLE_SESSION` to something unique, adjust
-  `MAX_ITER`, decide trigger type (schedule / conditional / webhook).
-  The script also reads an `AGENT_CMD` env var: default is Claude Code,
-  but users on Codex / Cursor / etc. can override before launch (e.g.
-  `AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"` or
-  the safer `AGENT_CMD="codex --full-auto"`). Mention this explicitly
-  to non-Claude-Code users.
+- `trigger.sh` — set `MIDDLE_SESSION` to something unique for this task
+  line, adjust `MAX_ITER`, decide trigger type (schedule / conditional /
+  webhook). The fixed name is reused across cycles, but Layer 3 kills the
+  session after each cycle and starts it fresh for the next one. If you
+  need multiple independent trigger families on the same project, either
+  route them through one queue/drainer or give them distinct task
+  directories/worktrees and distinct `MIDDLE_SESSION` names; do not let
+  multiple schedulers write into the same middle TUI. The script also
+  reads an `AGENT_CMD` env var: default is Claude Code, but users on
+  Codex / Cursor / etc. can override before launch (e.g.
+  `AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"` or the
+  safer `AGENT_CMD="codex --full-auto"`). Mention this explicitly to
+  non-Claude-Code users.
 - `_meta.md` — fill in worktree path, branch, parent repo, merge
   target
 - Leave `plan.md`, `inbox.md`, `escalations.md` empty (their skeletons
@@ -418,9 +428,13 @@ when adjusting prompts or scripts:
    mechanism later, update the perpetuum prompts and setup docs in the
    same change. Do not leave this as a soft requirement that Layer 2
    can forget to enforce.
-4. Layer 2's prompts are atomic and lexically ordered; don't fuse
+4. Layer 2 is fresh per cycle. Layer 3 owns the fixed middle tmux session
+   name, starts it at cycle beginning, sends the phase prompts, and kills
+   it after the cycle. Persistent state belongs in `plan.md`, `inbox.md`,
+   `escalations.md`, artifacts, and git.
+5. Layer 2's prompts are atomic and lexically ordered; don't fuse
    them.
-5. Sync uses `.cycle_done_*` flag + tmux silence fallback + total
+6. Sync uses `.cycle_done_*` flag + tmux silence fallback + total
    timeout — all three are needed; don't drop one.
 
 ## After-setup briefing
@@ -429,11 +443,12 @@ After launching, walk the user through these in their language. The
 user just handed a coding agent the keys to their codebase; they need
 to know how to drive.
 
-- **How a cycle runs.** Trigger fires → middle agent reads `plan.md`
-  / `inbox.md` → pastes prompt 1 to plan, then prompt 2 to dispatch
-  via `cc-use` → judges each result → commits, escalates, or
-  records. Then sleep, repeat. The whole thing keeps going across
-  cycles, restarts, and your absence.
+- **How a cycle runs.** Trigger fires → Layer 3 starts a fresh middle
+  tmux session with this task's fixed session name → middle agent reads
+  `plan.md` / `inbox.md` → prompt 1 plans, prompt 2 dispatches via
+  `cc-use` and judges results → commits, escalates, or records → Layer 3
+  kills the middle session, sleeps, then repeats. The state that carries
+  forward lives in files and git.
 
 - **What they can edit, and how.**
   - `inbox.md` — yes, anytime, write a one-liner under `## Pending`

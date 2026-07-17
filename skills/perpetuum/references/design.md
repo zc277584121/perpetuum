@@ -132,7 +132,7 @@ make the three solutions practical to run.
 | 4 | Exploration vs Exploitation prompt split | `prompts/1_explore.md` plans, `prompts/2_execute.md` does. **Implements P1's plan half.** |
 | 5 | File-based persistent memory | plan.md + inbox.md + escalations.md + git log. No vector DB needed for this working set — small enough to re-read in full each cycle. Optional vector-retrieval memory (e.g. [MemSearch](https://github.com/zilliztech/memsearch)) can plug in alongside it for broader personal history. **Enables P2 (state survives triggered cycles) and P3 (async channels are just files).** |
 | 6 | Asynchronous human escalation | escalations.md never blocks the loop. New cycles still run. **Implements P3's escalations channel.** |
-| 7 | Trigger abstraction | schedule / conditional / webhook are all valid Layer 3 implementations. Same Layer 2/1. **Implements P2.** |
+| 7 | Trigger abstraction | schedule / conditional / webhook are all valid Layer 3 implementations. Same per-cycle Layer 2/1 contract. **Implements P2.** |
 | 8 | File-as-contract | Who can edit which file is a convention, not enforcement. Cleaner than role-based access. **Makes P3's shared-file channels safe in practice.** |
 
 Removing any one of these breaks something:
@@ -217,17 +217,17 @@ question it answers**. Don't add a phase just for the sake of structure.
 
 ## Why agents must always re-read plan.md at cycle start
 
-Layer 2 is a persistent CC TUI. Its conversation context accumulates
-across cycles. Without forced re-reads, it would rely on "I remember
-from earlier we decided to skip postgres" — which is fragile if the
-user edited plan.md or inbox.md between cycles.
+Layer 2 is recreated for every cycle, but the project state still changes
+between cycles and can be edited by the user through `inbox.md` or by the
+previous cycle through `plan.md` and `escalations.md`. Without forced
+re-reads, Layer 2 would either miss the current state or rely on whatever
+was copied into its prompt by accident.
 
-The two prompt templates explicitly say "read plan.md / inbox.md /
+The prompt templates explicitly say "read plan.md / inbox.md /
 escalations.md history" at the start. This makes the agent's behavior
-**deterministic on file state**, not on conversation memory. This is
-the same trick Ralph Loop uses (fresh context every cycle); perpetuum
-gets most of the benefit without paying the cold-start cost every
-cycle.
+**deterministic on file state**, not on conversation memory. It is the same
+principle Ralph Loop uses: fresh context every cycle, with durable state in
+files and git.
 
 ## Why .perpetuum/ is dot-prefixed
 

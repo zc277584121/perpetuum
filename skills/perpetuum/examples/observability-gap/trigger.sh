@@ -7,8 +7,9 @@ set -uo pipefail
 TASK_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$TASK_DIR/../.." && pwd)"
 MIDDLE_SESSION="middle-obsv-$(basename "$PROJECT_ROOT")"
+SCHEDULER_GUARD_DIR="$TASK_DIR/scheduler.guard"
 
-# Inner-agent command for Layer 2 (the persistent agent TUI in tmux).
+# Inner-agent command for Layer 2 (a fresh per-cycle agent TUI in tmux).
 # Default: Claude Code with permissions bypassed.
 # For Codex CLI users, override before running, e.g.:
 #   AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox" .perpetuum/<task>/trigger.sh
@@ -28,12 +29,45 @@ TUI_BOOT_WAIT=25
 LOG="$TASK_DIR/trigger.log"
 log() { echo "[$(date '+%F %T')] $*" | tee -a "$LOG"; }
 
-ensure_middle_session() {
-  if ! tmux has-session -t "$MIDDLE_SESSION" 2>/dev/null; then
-    log "Starting $MIDDLE_SESSION (cwd=$PROJECT_ROOT)"
-    tmux new-session -d -s "$MIDDLE_SESSION" -c "$PROJECT_ROOT" "$AGENT_CMD"
-    sleep "$TUI_BOOT_WAIT"
+acquire_scheduler() {
+  if mkdir "$SCHEDULER_GUARD_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "$SCHEDULER_GUARD_DIR/pid"
+    return 0
   fi
+  local existing_pid=""
+  [ -f "$SCHEDULER_GUARD_DIR/pid" ] && existing_pid="$(cat "$SCHEDULER_GUARD_DIR/pid" 2>/dev/null || true)"
+  if [ -n "$existing_pid" ] && ! kill -0 "$existing_pid" 2>/dev/null; then
+    rm -rf "$SCHEDULER_GUARD_DIR"
+    mkdir "$SCHEDULER_GUARD_DIR"
+    printf '%s\n' "$$" > "$SCHEDULER_GUARD_DIR/pid"
+    return 0
+  fi
+  log "another trigger.sh instance is already running for this task; exiting"
+  exit 0
+}
+
+release_scheduler() {
+  rm -f "$SCHEDULER_GUARD_DIR/pid"
+  rmdir "$SCHEDULER_GUARD_DIR" 2>/dev/null || true
+}
+
+start_middle_session() {
+  if tmux has-session -t "$MIDDLE_SESSION" 2>/dev/null; then
+    log "Removing stale $MIDDLE_SESSION before starting a fresh cycle"
+    tmux kill-session -t "$MIDDLE_SESSION" >/dev/null 2>&1 || true
+  fi
+  log "Starting $MIDDLE_SESSION (cwd=$PROJECT_ROOT)"
+  tmux new-session -d -s "$MIDDLE_SESSION" -c "$PROJECT_ROOT" "$AGENT_CMD"
+  sleep "$TUI_BOOT_WAIT"
+}
+
+stop_middle_session() {
+  tmux kill-session -t "$MIDDLE_SESSION" >/dev/null 2>&1 || true
+}
+
+cleanup() {
+  stop_middle_session
+  release_scheduler
 }
 
 # Send a multi-line prompt into the middle TUI using the same key sequence
@@ -90,14 +124,22 @@ wait_for_done() {
 
 run_cycle() {
   local cid="$1"
+  local status=0
+  start_middle_session
   for pf in $(ls "$TASK_DIR"/prompts/[0-9]*_*.md 2>/dev/null | sort); do
     local phase; phase=$(basename "$pf" .md | sed 's/[^a-zA-Z0-9_]/_/g')
     log "[$phase] sending prompt"
     local pt; pt=$(sed "s/\${CYCLE_ID}/${cid}-${phase}/g" "$pf")
     send_prompt "$pt"
-    wait_for_done "${cid}-${phase}" "$WAIT_PHASE_TIMEOUT"
+    if ! wait_for_done "${cid}-${phase}" "$WAIT_PHASE_TIMEOUT"; then
+      log "[$phase] failed or timed out"
+      status=1
+      break
+    fi
     log "[$phase] complete"
   done
+  stop_middle_session
+  return "$status"
 }
 
 check_pause() { while [ -f "$TASK_DIR/.paused" ]; do log "paused..."; sleep 60; done; }
@@ -109,13 +151,15 @@ main() {
 
   log ""
   log "===== observability-gap started, MAX_ITER=$MAX_ITER ====="
-  ensure_middle_session
+  acquire_scheduler
+  trap cleanup EXIT
+  trap 'exit 130' INT TERM
 
   for ITER in $(seq 1 "$MAX_ITER"); do
     check_pause; check_stop && { log "graceful stop"; break; }
     log ""
     log "########## ITER $ITER / $MAX_ITER ##########"
-    run_cycle "${ITER}-$(date +%s)"
+    run_cycle "${ITER}-$(date +%s)" || break
     check_stop && break
     [ "$ITER" -lt "$MAX_ITER" ] && { log "sleeping..."; sleep "$SLEEP_BETWEEN_CYCLES"; }
   done

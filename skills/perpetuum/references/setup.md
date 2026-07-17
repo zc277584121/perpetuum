@@ -53,8 +53,8 @@ resolved either way.
 ## Recommending extra skills for Layer 1 / Layer 2 (ask adaptively — not every task needs this)
 
 Layer 1 (the `cc-use`-dispatched inner agent) and Layer 2 (the
-middle agent in the `tmux` session) are both real, running agent
-instances — they get whatever skills are installed and visible in
+per-cycle middle agent in the `tmux` session) are both real, running
+agent instances — they get whatever skills are installed and visible in
 their environment, the same way any other session would. Most of the
 time this needs no attention: skills are typically installed globally
 and shared across sessions, and a well-described skill gets picked up
@@ -154,7 +154,12 @@ For each file in the chosen example:
      - `SLEEP_BETWEEN_CYCLES` (default 120s = 2 min — full throttle;
        bump to 1800 or 3600 if the user has cost concerns)
      - `WAIT_PHASE_TIMEOUT` / `SILENCE_THRESHOLD`
-     - `MIDDLE_SESSION` name (e.g. `middle-adv-<project-short>`)
+     - `MIDDLE_SESSION` name (e.g. `middle-adv-<project-short>`). This
+       name is fixed per task line and reused across cycles, but Layer 3
+       kills the tmux session after each cycle and starts it fresh for
+       the next one. For independent trigger families, use separate task
+       directories/worktrees or route events through one queue; do not
+       let multiple schedulers target the same middle session.
      - Trigger type (schedule, conditional, webhook)
    - **`plan.md`** — start empty with `## Pending` and `## Done`
      sections.

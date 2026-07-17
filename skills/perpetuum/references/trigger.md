@@ -25,9 +25,11 @@ set -uo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TASK_DIR="$(cd "$(dirname "$0")" && pwd)"
 MIDDLE_SESSION="middle-<UNIQUE_TAG>"
+SCHEDULER_GUARD_DIR="$TASK_DIR/scheduler.guard"
 
-# Inner-agent command for Layer 2. Default = Claude Code, permissions
-# bypassed. Override for other coding-CLI agents:
+# Inner-agent command for Layer 2. Layer 2 is created fresh for each cycle with
+# this fixed session name, then killed after the cycle. Default = Claude Code,
+# permissions bypassed. Override for other coding-CLI agents:
 #   Codex CLI:  AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"
 #               or (safer) AGENT_CMD="codex --full-auto"
 #   Cursor, Windsurf, etc.: AGENT_CMD="whatever-starts-your-agent"
@@ -45,12 +47,47 @@ LOG="$TASK_DIR/trigger.log"
 # === Shared helpers ===
 log()   { echo "[$(date '+%F %T')] $*" | tee -a "$LOG"; }
 
-ensure_middle_session() {
-  if ! tmux has-session -t "$MIDDLE_SESSION" 2>/dev/null; then
-    log "Starting $MIDDLE_SESSION (cwd=$PROJECT_ROOT)"
-    tmux new-session -d -s "$MIDDLE_SESSION" -c "$PROJECT_ROOT" "$AGENT_CMD"
-    sleep "$TUI_BOOT_WAIT"
+acquire_scheduler() {
+  if mkdir "$SCHEDULER_GUARD_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "$SCHEDULER_GUARD_DIR/pid"
+    return 0
   fi
+
+  local existing_pid=""
+  [ -f "$SCHEDULER_GUARD_DIR/pid" ] && existing_pid="$(cat "$SCHEDULER_GUARD_DIR/pid" 2>/dev/null || true)"
+  if [ -n "$existing_pid" ] && ! kill -0 "$existing_pid" 2>/dev/null; then
+    rm -rf "$SCHEDULER_GUARD_DIR"
+    mkdir "$SCHEDULER_GUARD_DIR"
+    printf '%s\n' "$$" > "$SCHEDULER_GUARD_DIR/pid"
+    return 0
+  fi
+
+  log "another trigger.sh instance is already running for this task; exiting"
+  exit 0
+}
+
+release_scheduler() {
+  rm -f "$SCHEDULER_GUARD_DIR/pid"
+  rmdir "$SCHEDULER_GUARD_DIR" 2>/dev/null || true
+}
+
+start_middle_session() {
+  if tmux has-session -t "$MIDDLE_SESSION" 2>/dev/null; then
+    log "Removing stale $MIDDLE_SESSION before starting a fresh cycle"
+    tmux kill-session -t "$MIDDLE_SESSION" >/dev/null 2>&1 || true
+  fi
+  log "Starting $MIDDLE_SESSION (cwd=$PROJECT_ROOT)"
+  tmux new-session -d -s "$MIDDLE_SESSION" -c "$PROJECT_ROOT" "$AGENT_CMD"
+  sleep "$TUI_BOOT_WAIT"
+}
+
+stop_middle_session() {
+  tmux kill-session -t "$MIDDLE_SESSION" >/dev/null 2>&1 || true
+}
+
+cleanup() {
+  stop_middle_session
+  release_scheduler
 }
 
 # Send a multi-line prompt into the middle TUI using the same key sequence
@@ -111,15 +148,23 @@ wait_for_done() {
 
 run_cycle() {
   local cycle_id="$1"
+  local status=0
+  start_middle_session
   # Glob the prompts/ subdirectory in lexical order: 1_explore.md → 2_execute.md → ...
   for prompt_file in $(ls "$TASK_DIR"/prompts/[0-9]*_*.md | sort); do
     local phase=$(basename "$prompt_file" .md)
     local prompt_text=$(sed "s/\${CYCLE_ID}/$cycle_id/g" "$prompt_file")
     log "[$phase] sending prompt"
     send_prompt "$prompt_text"
-    wait_for_done "$cycle_id-$phase" "$WAIT_PHASE_TIMEOUT"
+    if ! wait_for_done "$cycle_id-$phase" "$WAIT_PHASE_TIMEOUT"; then
+      log "[$phase] failed or timed out"
+      status=1
+      break
+    fi
     log "[$phase] complete"
   done
+  stop_middle_session
+  return "$status"
 }
 
 # === Control signal checks ===
@@ -149,7 +194,9 @@ The `MAIN LOOP` is what differs across trigger types.
 # === MAIN LOOP (schedule) ===
 mkdir -p "$TASK_DIR/state"
 log "===== perpetuum task <name> started, MAX_ITER=$MAX_ITER ====="
-ensure_middle_session
+acquire_scheduler
+trap cleanup EXIT
+trap 'exit 130' INT TERM
 
 for ITER in $(seq 1 "$MAX_ITER"); do
   check_pause
@@ -157,7 +204,7 @@ for ITER in $(seq 1 "$MAX_ITER"); do
 
   log ""
   log "########## ITER $ITER / $MAX_ITER ##########"
-  run_cycle "${ITER}-$(date +%s)"
+  run_cycle "${ITER}-$(date +%s)" || break
 
   check_stop && break
 
@@ -178,6 +225,10 @@ For "run a cycle whenever GitHub has a new PR I haven't seen":
 mkdir -p "$TASK_DIR/state"
 LAST_SEEN_FILE="$TASK_DIR/state/last_seen"
 [ -f "$LAST_SEEN_FILE" ] || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ > "$LAST_SEEN_FILE"
+log "===== perpetuum conditional task <name> started, MAX_ITER=$MAX_ITER ====="
+acquire_scheduler
+trap cleanup EXIT
+trap 'exit 130' INT TERM
 
 POLL_FREQ=3600  # 1 hour
 ITER=0
@@ -192,8 +243,7 @@ while [ "$ITER" -lt "$MAX_ITER" ]; do
   if [ "$NEW" -gt 0 ]; then
     ITER=$((ITER + 1))
     log "########## triggered: $NEW new PRs ##########"
-    ensure_middle_session
-    run_cycle "${ITER}-$(date +%s)"
+    run_cycle "${ITER}-$(date +%s)" || break
     date -u +%Y-%m-%dT%H:%M:%SZ > "$LAST_SEEN_FILE"
   else
     log "no change; sleep ${POLL_FREQ}s"
@@ -215,6 +265,11 @@ plus a queue. Simplest form using `inotifywait` on a queue directory:
 
 QUEUE_DIR="$TASK_DIR/state/queue"
 mkdir -p "$QUEUE_DIR"
+log "===== perpetuum webhook task <name> started, MAX_ITER=$MAX_ITER ====="
+acquire_scheduler
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
 ITER=0
 while [ "$ITER" -lt "$MAX_ITER" ]; do
   check_pause
@@ -226,8 +281,7 @@ while [ "$ITER" -lt "$MAX_ITER" ]; do
   if [ -n "$EVENT_FILE" ]; then
     ITER=$((ITER + 1))
     log "########## event: $EVENT_FILE ##########"
-    ensure_middle_session
-    run_cycle "${ITER}-$(date +%s)"
+    run_cycle "${ITER}-$(date +%s)" || break
     rm "$QUEUE_DIR/$EVENT_FILE"
   fi
 done

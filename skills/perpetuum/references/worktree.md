@@ -70,7 +70,9 @@ This is **critical** — if two trigger.sh use the same session name,
 they will paste into the same TUI and corrupt each other.
 
 Suggested convention: `middle-<task-name>` or `middle-<task-tag>` where
-the tag is short and unique.
+the tag is short and unique. A task reuses its own fixed name across
+cycles, but Layer 3 kills and recreates that tmux session for each
+cycle.
 
 ### 5. Launch independently
 

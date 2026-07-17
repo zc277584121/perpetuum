@@ -52,7 +52,7 @@ git -C <project-root> log --oneline -10
 If the user wants to see *what the agent is actually thinking* right now:
 
 ```bash
-# Attach read-only to the middle CC TUI (will not affect it)
+# Attach read-only to the middle CC TUI if a cycle is currently running
 tmux attach -t middle-<task> -r
 
 # Or just snapshot the current screen
@@ -93,7 +93,7 @@ If a cycle has been running far longer than expected:
 | `trigger.log` last line is "waiting for done flag" for hours | inner agent is in a long delegate (probably fine); check tmux snapshot |
 | Last log line is hours old, no new log entry | trigger.sh might have crashed; `pgrep -f trigger.sh` to confirm |
 | Many cycle_done residual flags in `state/` | sync got desynchronized; manual `rm` and relaunch is usually fine |
-| `tmux has-session` returns no for middle session | middle CC died; the next cycle will recreate it but state continuity in conversation is lost (files are fine) |
+| `tmux has-session` returns no for middle session | normal while sleeping between cycles; if trigger.log says a cycle is active, the middle CC died and the in-flight cycle should be relaunched |
 
 Recovery is almost always: **stop, delete stale signals, relaunch.**
 State is in files; loss of in-flight cycle costs one round of work, not
