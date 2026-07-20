@@ -326,7 +326,8 @@ customize:
   too — ask adaptively, see `references/setup.md` → "Recommending extra
   skills"
 - `trigger.sh` — set `MIDDLE_SESSION` to something unique for this task
-  line, adjust `MAX_ITER`, decide trigger type (schedule / conditional /
+  line, keep its exact-match `MIDDLE_SESSION_TARGET` / `MIDDLE_PANE_TARGET`
+  derivatives, adjust `MAX_ITER`, decide trigger type (schedule / conditional /
   webhook). The fixed name is reused across cycles, but Layer 3 kills the
   session after each cycle and starts it fresh for the next one. If you
   need multiple independent trigger families on the same project, either
@@ -474,7 +475,7 @@ to know how to drive.
   | "pause" / "stop for now" / "hold on" | `touch .perpetuum/<task>/.paused` |
   | "resume" / "keep going" / "start again" | `rm .perpetuum/<task>/.paused` |
   | "stop gracefully" / "finish this cycle and stop" | `touch .perpetuum/<task>/.stop_after_current` |
-  | "kill it" / "force stop" / "just stop" | `pkill -f trigger.sh ; tmux kill-session -t middle-<task>` |
+  | "kill it" / "force stop" / "just stop" | `pkill -f trigger.sh ; tmux kill-session -t '=middle-<task>'` |
   | "skip X" / "don't bother with X" | append `SKIP: X` to `inbox.md` `## Pending` |
   | "prioritize Y" / "Y first" | append `PRIORITIZE: Y` to `inbox.md` |
   | "add a test/scan for Z" | append `ADD: Z` to `inbox.md` |

@@ -159,7 +159,11 @@ For each file in the chosen example:
        kills the tmux session after each cycle and starts it fresh for
        the next one. For independent trigger families, use separate task
        directories/worktrees or route events through one queue; do not
-       let multiple schedulers target the same middle session.
+       let multiple schedulers target the same middle session. Keep the
+       derived `MIDDLE_SESSION_TARGET="=$MIDDLE_SESSION"` and
+       `MIDDLE_PANE_TARGET="=$MIDDLE_SESSION:"` lines; they force exact
+       tmux matching and prevent a same-prefix sibling from being mistaken
+       for this task's middle session.
      - Trigger type (schedule, conditional, webhook)
    - **`plan.md`** — start empty with `## Pending` and `## Done`
      sections.

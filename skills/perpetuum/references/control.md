@@ -13,7 +13,7 @@ commands. No new protocol, no message bus, no API.
 | Running | (default after launch) | any of below |
 | **Paused** | `touch .perpetuum/<task>/.paused` | `rm .perpetuum/<task>/.paused` |
 | **Stopped (graceful)** | `touch .perpetuum/<task>/.stop_after_current` | (process exits naturally; relaunch trigger.sh to resume) |
-| **Killed (hard)** | `pkill -f trigger.sh` then `tmux kill-session -t middle-<task>` | relaunch trigger.sh |
+| **Killed (hard)** | `pkill -f trigger.sh` then `tmux kill-session -t '=middle-<task>'` | relaunch trigger.sh |
 | **Done (full cleanup)** | see below | can't — this is the end of this task's line |
 
 ## What each one actually does
@@ -45,6 +45,27 @@ where it left off and starts a fresh middle session for the next cycle.
 Use case: "I'm done for the week, stop cleanly. I'll restart
 Monday."
 
+### Apply configuration changes after the current cycle
+
+`trigger.sh` reads shell configuration such as cadence and iteration limits when
+the process starts. To change those values without interrupting a cycle, wait on
+the scheduler guard PID, not a tmux session-name prefix:
+
+```bash
+TASK=.perpetuum/<task>
+touch "$TASK/.stop_after_current"
+PID=$(cat "$TASK/scheduler.guard/pid")
+while kill -0 "$PID" 2>/dev/null; do sleep 5; done
+rm -f "$TASK/.stop_after_current"
+nohup "$TASK/trigger.sh" > /dev/null 2>&1 &
+```
+
+The guard PID identifies the exact trigger process. Do not build an automatic
+restart watcher around `tmux has-session -t NAME` with a watcher session named
+`NAME-restart`: tmux accepts unique name prefixes, so after `NAME` exits the
+watcher can match itself and wait forever. When a tmux session check is really
+needed, force exact matching with `tmux has-session -t "=$NAME"`.
+
 ### Kill (hard)
 
 Just kill the process and optionally the tmux session. There may be a
@@ -64,8 +85,8 @@ version of "kill":
 
 ```bash
 pkill -f trigger.sh
-tmux kill-session -t middle-<task>
-tmux kill-session -t ccu-<project-name>   # cc-use's Layer 1 session — same
+tmux kill-session -t '=middle-<task>'
+tmux kill-session -t '=ccu-<project-name>'   # cc-use's Layer 1 session — same
                                            # derivation cc-use itself uses:
                                            # session_name_for_project(project, agent)
 ```
@@ -89,7 +110,7 @@ the right command. Map liberally:
 | pause / stop for now / hold on | `touch .paused` |
 | resume / keep going / start again | `rm .paused` |
 | stop after this round / wrap up | `touch .stop_after_current` |
-| kill it / force stop | `pkill -f trigger.sh; tmux kill-session -t middle-<task>` |
+| kill it / force stop | `pkill -f trigger.sh; tmux kill-session -t '=middle-<task>'` |
 | I'm done with this for good / clean everything up | full cleanup — see "Done (full cleanup)" above; confirm before killing the `ccu-*` session, it may be shared with other work on the same project |
 | start again / relaunch | `nohup .perpetuum/<task>/trigger.sh > /dev/null 2>&1 &` |
 | is it paused? / is it running? | check both: `ls .paused 2>/dev/null` and `pgrep -f trigger.sh` |
@@ -106,7 +127,7 @@ TASK=.perpetuum/<task>
 echo "trigger.sh running: $(pgrep -f $TASK/trigger.sh | head -1 || echo no)"
 echo "paused flag:        $(test -f $TASK/.paused && echo yes || echo no)"
 echo "stop flag:          $(test -f $TASK/.stop_after_current && echo yes || echo no)"
-echo "middle tmux:        $(tmux has-session -t middle-<task> 2>/dev/null && echo alive || echo dead)"
+echo "middle tmux:        $(tmux has-session -t '=middle-<task>' 2>/dev/null && echo alive || echo dead)"
 echo "last log line:      $(tail -1 $TASK/trigger.log)"
 ```
 

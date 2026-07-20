@@ -53,10 +53,10 @@ If the user wants to see *what the agent is actually thinking* right now:
 
 ```bash
 # Attach read-only to the middle CC TUI if a cycle is currently running
-tmux attach -t middle-<task> -r
+tmux attach -t '=middle-<task>' -r
 
 # Or just snapshot the current screen
-tmux capture-pane -t middle-<task> -p
+tmux capture-pane -t '=middle-<task>:' -p
 
 # Look at inner cc-use snapshots
 ls .cc-use/state/ccu-*/screens/ | tail -5

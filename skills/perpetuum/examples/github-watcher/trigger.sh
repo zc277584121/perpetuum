@@ -12,6 +12,9 @@ TASK_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$TASK_DIR/../.." && pwd)"
 
 MIDDLE_SESSION="middle-gh-$(basename "$PROJECT_ROOT")"
+MIDDLE_SESSION_TARGET="=$MIDDLE_SESSION"
+MIDDLE_PANE_TARGET="=$MIDDLE_SESSION:"
+# Exact targets prevent tmux from matching a same-prefix sibling session.
 SCHEDULER_GUARD_DIR="$TASK_DIR/scheduler.guard"
 
 # === Customize for your repo ===
@@ -68,9 +71,9 @@ release_scheduler() {
 }
 
 start_middle_session() {
-  if tmux has-session -t "$MIDDLE_SESSION" 2>/dev/null; then
+  if tmux has-session -t "$MIDDLE_SESSION_TARGET" 2>/dev/null; then
     log "Removing stale $MIDDLE_SESSION before starting a fresh cycle"
-    tmux kill-session -t "$MIDDLE_SESSION" >/dev/null 2>&1 || true
+    tmux kill-session -t "$MIDDLE_SESSION_TARGET" >/dev/null 2>&1 || true
   fi
   log "Starting $MIDDLE_SESSION (cwd=$PROJECT_ROOT)"
   tmux new-session -d -s "$MIDDLE_SESSION" -c "$PROJECT_ROOT" \
@@ -79,7 +82,7 @@ start_middle_session() {
 }
 
 stop_middle_session() {
-  tmux kill-session -t "$MIDDLE_SESSION" >/dev/null 2>&1 || true
+  tmux kill-session -t "$MIDDLE_SESSION_TARGET" >/dev/null 2>&1 || true
 }
 
 cleanup() {
@@ -98,9 +101,9 @@ send_prompt() {
   local tmp
   tmp=$(mktemp)
   printf '%s' "$prompt_text" > "$tmp"
-  tmux send-keys -t "$MIDDLE_SESSION" C-u
+  tmux send-keys -t "$MIDDLE_PANE_TARGET" C-u
   tmux load-buffer -b pp_prompt "$tmp"
-  tmux paste-buffer -d -b pp_prompt -t "$MIDDLE_SESSION"
+  tmux paste-buffer -d -b pp_prompt -t "$MIDDLE_PANE_TARGET"
   rm -f "$tmp"
   sleep 0.5
 
@@ -112,14 +115,14 @@ send_prompt() {
   # is keyed on AGENT_CMD content (no hardcoded agent name in the loop)
   # so future agents can opt in by matching their command string here.
   case "$AGENT_CMD" in
-    codex*) tmux send-keys -t "$MIDDLE_SESSION" Escape; sleep 0.3 ;;
+    codex*) tmux send-keys -t "$MIDDLE_PANE_TARGET" Escape; sleep 0.3 ;;
   esac
 
-  tmux send-keys -t "$MIDDLE_SESSION" Enter
+  tmux send-keys -t "$MIDDLE_PANE_TARGET" Enter
   sleep 0.7
-  tmux send-keys -t "$MIDDLE_SESSION" C-m
+  tmux send-keys -t "$MIDDLE_PANE_TARGET" C-m
   sleep 0.7
-  tmux send-keys -t "$MIDDLE_SESSION" Enter
+  tmux send-keys -t "$MIDDLE_PANE_TARGET" Enter
 }
 
 wait_for_done() {
@@ -137,7 +140,7 @@ wait_for_done() {
       rm -f "$flag"; return 0
     fi
     local snap
-    snap=$(tmux capture-pane -t "$MIDDLE_SESSION" -p 2>/dev/null | sha256sum | awk '{print $1}')
+    snap=$(tmux capture-pane -t "$MIDDLE_PANE_TARGET" -p 2>/dev/null | sha256sum | awk '{print $1}')
     if [ "$snap" = "$prev" ]; then
       silent=$((silent + POLL_INTERVAL))
       [ "$silent" -ge "$SILENCE_THRESHOLD" ] && { log "  -> done via silence"; return 0; }
