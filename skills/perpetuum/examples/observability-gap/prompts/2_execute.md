@@ -1,21 +1,9 @@
 # Task: scan + propose + commit or escalate
 
-> ⚠️ **Important: `cc-use` is an installed Agent Skill, not a shell command.**
-> Use it via your host agent's skill mechanism (your host will load
-> cc-use's SKILL.md and know how to dispatch the inner agent). **Do not**
-> run `cc-use` directly with the Bash tool — that bypasses the skill
-> protocol and will fail.
->
-> If your environment does not recognize `cc-use` as a skill, or `cc-use`
-> reports an inner-agent startup failure (a known issue exists for Codex
-> outer agents in `--dangerously-bypass-approvals-and-sandbox` mode where
-> cc-use's hardcoded `--ask-for-approval` / `--sandbox` flags clash —
-> upstream cc-use issue, not perpetuum): **do not fall back to
-> Bash-running cc-use, do not spawn a sub-agent yourself, do not write
-> the work into this session's context directly.** Surface it as a
-> blocked-on-environment escalation to `escalations.md` and stop the
-> cycle there. The whole point of the three-layer architecture is the
-> fresh-context inner agent; faking it locally defeats the purpose.
+> Use the `cc-use` skill for every Layer-1 operation. If cc-use is not
+> available, the inner session is not ready, or its identity cannot be
+> verified, record a blocked-on-environment escalation and stop the item.
+> Do not perform Layer-1 work in the Layer-2 session.
 Use `cc-use` to dispatch the scan to the inner agent. Take its findings,
 classify each, and either commit the obvious additions or escalate the
 opinionated ones.
@@ -28,13 +16,11 @@ Steps:
    Require:
    - the project at `/<abs-path>` — must be absolute
    - the agent family matching the outer agent (`claude`, `codex`, etc.)
-   - a **fresh, no-memory inner session** every dispatch — never a
-     reused one, which would quietly let Layer 1 accumulate memory
-     across cycles
-   - with the current `cc-use` helper, that fresh-start requirement
-     means every `delegate` call must use `--replace`; if `cc-use`
-     later changes its fresh-start mechanism, use the documented
-     replacement mechanism and update this prompt
+   - a uniquely named session that has not been used by an earlier
+     item or cycle; include the task, cycle, item, and a
+     collision-resistant suffix in the name
+   - readiness checks, task delivery, monitoring, and follow-up
+     guidance for this item all use that same session
    - Task: "Scan `<module>` for `<obs kind>` gaps. For each candidate,
      report: file path, line range, current behavior, what's missing
      (log/metric/span/event), and a suggested addition consistent with
@@ -49,7 +35,7 @@ Steps:
 3. For each finding the inner agent reports, classify:
 
    **a. Clearly missing, obvious addition matching existing conventions:**
-   - Dispatch a second inner call to make the addition
+   - Ask the same inner session to make the addition
    - Verify the project still builds / tests still pass
    - Commit: `obsv(<module>): add <log/metric/span> for <event>`
    - Mark `[ADDED]` in plan.md with commit SHA
@@ -65,6 +51,10 @@ Steps:
 
    **d. False positive (inner agent misread the code):**
    - Mark `[FALSE-POSITIVE]` with brief note.
+
+   After accepting or rejecting the item, close its named session. A
+   retry that requires fresh context starts another uniquely named
+   session.
 
 4. Record. Every Done item:
 

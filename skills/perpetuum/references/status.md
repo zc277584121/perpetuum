@@ -58,9 +58,10 @@ tmux attach -t '=middle-<task>' -r
 # Or just snapshot the current screen
 tmux capture-pane -t '=middle-<task>:' -p
 
-# Look at inner cc-use snapshots
-ls .cc-use/state/ccu-*/screens/ | tail -5
 ```
+
+Inspect the uniquely named Layer-1 session reported by the current execute
+phase through the cc-use skill.
 
 **Important: `tmux attach -r` (read-only) is safe.** Without `-r`, you
 would steal the active client and the agent would notice (cursor
@@ -90,7 +91,7 @@ If a cycle has been running far longer than expected:
 
 | Symptom | Probable cause |
 |---|---|
-| `trigger.log` last line is "waiting for done flag" for hours | inner agent is in a long delegate (probably fine); check tmux snapshot |
+| `trigger.log` last line is "waiting for done flag" for hours | Layer 1 may still be running a long task; check the tmux snapshot |
 | Last log line is hours old, no new log entry | trigger.sh might have crashed; `pgrep -f trigger.sh` to confirm |
 | Many cycle_done residual flags in `state/` | sync got desynchronized; manual `rm` and relaunch is usually fine |
 | `tmux has-session` returns no for middle session | normal while sleeping between cycles; if trigger.log says a cycle is active, the middle CC died and the in-flight cycle should be relaunched |

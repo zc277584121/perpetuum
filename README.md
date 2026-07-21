@@ -622,8 +622,8 @@ in the same order.
    cron, a GitHub Actions runner, or a Lambda; Layer 2 could be
    Claude Code, Codex, Cursor, or another coding-agent TUI; Layer 1
    could be any `cc-use`-supported agent. The interfaces between
-   layers (file state, tmux paste, `cc-use delegate`) are what stays
-   stable; everything else is interchangeable. This is why the same
+   layers (file state, tmux paste, and named cc-use sessions) are what
+   stays stable; everything else is interchangeable. This is why the same
    small skill stays lightweight yet handles wildly different
    scenarios — the **architecture is the contract**, the pieces inside
    are not.
@@ -692,6 +692,11 @@ To update a project-level install, re-run the `npx skills add` command.
 skill — Layer 2 uses it to dispatch every unit of work to a
 fresh-context inner agent. The skill checks at init time and prompts
 you if missing:
+
+Each logical Layer-1 dispatch uses a unique session name. Readiness checks,
+task delivery, monitoring, and follow-up guidance stay in that session until
+Layer 2 judges the result, then the session is closed. Separate items and blind
+judges use separate names.
 
 ```bash
 npx skills add zc277584121/cc-use --all -g

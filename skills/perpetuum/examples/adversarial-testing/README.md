@@ -31,7 +31,7 @@ Use when the user has:
 |---|---|
 | `trigger.sh` | `MIDDLE_SESSION`, `MAX_ITER`, `SLEEP_BETWEEN_CYCLES`, possibly the timeouts |
 | `prompts/1_explore.md` | The "test dimensions examples" block — replace with this project's actual axes |
-| `prompts/2_execute.md` | The `--project` path (must be absolute), commit-style guidance if the project has conventions |
+| `prompts/2_execute.md` | The absolute project path and commit-style guidance if the project has conventions |
 | `plan.md` | Leave empty, agent fills it |
 | `inbox.md` | Leave empty, user fills as they go |
 | `escalations.md` | Leave empty |

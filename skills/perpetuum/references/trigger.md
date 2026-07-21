@@ -36,9 +36,11 @@ SCHEDULER_GUARD_DIR="$TASK_DIR/scheduler.guard"
 # Inner-agent command for Layer 2. Layer 2 is created fresh for each cycle with
 # this fixed session name, then killed after the cycle. Default = Claude Code,
 # permissions bypassed. Override for other coding-CLI agents:
-#   Codex CLI:  AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"
+#   Codex CLI:  AGENT_KIND=codex
+#               AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"
 #               or (safer) AGENT_CMD="codex --full-auto"
 #   Cursor, Windsurf, etc.: AGENT_CMD="whatever-starts-your-agent"
+AGENT_KIND="${AGENT_KIND:-claude}"
 AGENT_CMD="${AGENT_CMD:-claude --dangerously-skip-permissions}"
 
 MAX_ITER=20
@@ -96,10 +98,9 @@ cleanup() {
   release_scheduler
 }
 
-# Send a multi-line prompt into the middle TUI using the same key sequence
-# cc-use uses: C-u (clear input) → load-buffer from tmpfile → paste-buffer -d
-# → Enter → C-m → Enter. The triple-submit handles a known Codex CLI TUI
-# quirk in tmux where Enter alone sometimes doesn't commit
+# Send a multi-line prompt into the middle TUI: C-u (clear input) →
+# load-buffer from tmpfile → paste-buffer -d → Enter → C-m → Enter.
+# The triple-submit supports Codex CLI in tmux, where Enter alone may not commit
 # (https://github.com/openai/codex/issues/12645). Claude Code accepts the
 # same sequence without issue, so we don't branch by agent family.
 send_prompt() {
@@ -116,12 +117,9 @@ send_prompt() {
   # Codex-specific: dismiss the "Create a plan?" suggestion that Codex
   # sometimes pops up when it detects a complex prompt
   # (our explore phase prompt is exactly the kind of thing that triggers
-  # it). Claude Code doesn't have this popup and Escape may interfere
-  # with its TUI modals there, so we only send it for Codex. The branch
-  # is keyed on AGENT_CMD content (no hardcoded agent name in the loop)
-  # so future agents can opt in by matching their command string here.
-  case "$AGENT_CMD" in
-    codex*) tmux send-keys -t "$MIDDLE_PANE_TARGET" Escape; sleep 0.3 ;;
+  # it). Other agent families do not receive this compatibility key.
+  case "$AGENT_KIND" in
+    codex) tmux send-keys -t "$MIDDLE_PANE_TARGET" Escape; sleep 0.3 ;;
   esac
 
   tmux send-keys -t "$MIDDLE_PANE_TARGET" Enter
@@ -141,7 +139,17 @@ wait_for_done() {
   while true; do
     sleep "$POLL_INTERVAL"
     if [ -f "$flag" ]; then rm -f "$flag"; return 0; fi
-    local snap=$(tmux capture-pane -t "$MIDDLE_PANE_TARGET" -p 2>/dev/null | sha256sum | awk '{print $1}')
+    if ! tmux has-session -t "$MIDDLE_SESSION_TARGET" 2>/dev/null; then
+      log "middle session unavailable"
+      return 1
+    fi
+    local pane
+    local snap
+    if ! pane=$(tmux capture-pane -t "$MIDDLE_PANE_TARGET" -p 2>/dev/null); then
+      log "middle pane unavailable"
+      return 1
+    fi
+    snap=$(printf '%s' "$pane" | sha256sum | awk '{print $1}')
     if [ "$snap" = "$prev" ]; then
       silent=$((silent + POLL_INTERVAL))
       [ "$silent" -ge "$SILENCE_THRESHOLD" ] && return 0

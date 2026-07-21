@@ -60,11 +60,9 @@ rm -f "$TASK/.stop_after_current"
 nohup "$TASK/trigger.sh" > /dev/null 2>&1 &
 ```
 
-The guard PID identifies the exact trigger process. Do not build an automatic
-restart watcher around `tmux has-session -t NAME` with a watcher session named
-`NAME-restart`: tmux accepts unique name prefixes, so after `NAME` exits the
-watcher can match itself and wait forever. When a tmux session check is really
-needed, force exact matching with `tmux has-session -t "=$NAME"`.
+The scheduler guard PID is the trigger process identity. Use it for process
+lifecycle checks. When a tmux session check is needed, use an exact target such
+as `tmux has-session -t "=$NAME"`.
 
 ### Kill (hard)
 
@@ -78,24 +76,18 @@ Use case: "Something is wrong, just stop." (Or: process is wedged.)
 ### Done (full cleanup)
 
 Normal cycles kill the middle CC TUI after each cycle, but hard stops,
-crashes, or manual experiments can still leave stale middle or inner
-`cc-use` sessions in tmux. Full cleanup removes those leftovers when the
-user is genuinely finished — this is a distinct state, not just a harder
-version of "kill":
+crashes, or manual experiments can still leave stale sessions. Full cleanup
+removes those leftovers when the user is genuinely finished — this is a
+distinct state, not just a harder version of "kill":
 
 ```bash
 pkill -f trigger.sh
 tmux kill-session -t '=middle-<task>'
-tmux kill-session -t '=ccu-<project-name>'   # cc-use's Layer 1 session — same
-                                           # derivation cc-use itself uses:
-                                           # session_name_for_project(project, agent)
 ```
 
-**Only kill the `ccu-*` session if you're sure nothing else needs that
-project's inner session for continuity** — `cc-use`'s own default is to
-keep it alive indefinitely across unrelated future work on the same
-project. If the user has other tasks or ad hoc `cc-use` usage on the
-same project, leave it and only kill stale middle sessions.
+Then use the `cc-use` skill to close only the uniquely named Layer-1 sessions
+created for this perpetuum task. Do not infer a project-wide default session or
+close sessions owned by another task or by ad hoc cc-use work.
 
 Use case: "This task is done for good — PR merged, moving on, clean up
 everything." Not the same as "pause" or "stop for now."
@@ -111,7 +103,7 @@ the right command. Map liberally:
 | resume / keep going / start again | `rm .paused` |
 | stop after this round / wrap up | `touch .stop_after_current` |
 | kill it / force stop | `pkill -f trigger.sh; tmux kill-session -t '=middle-<task>'` |
-| I'm done with this for good / clean everything up | full cleanup — see "Done (full cleanup)" above; confirm before killing the `ccu-*` session, it may be shared with other work on the same project |
+| I'm done with this for good / clean everything up | full cleanup — see "Done (full cleanup)" above; close only the named Layer-1 sessions owned by this task |
 | start again / relaunch | `nohup .perpetuum/<task>/trigger.sh > /dev/null 2>&1 &` |
 | is it paused? / is it running? | check both: `ls .paused 2>/dev/null` and `pgrep -f trigger.sh` |
 

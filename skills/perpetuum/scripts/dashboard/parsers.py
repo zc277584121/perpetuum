@@ -7,7 +7,6 @@ files/tmux panes a human already inspects by hand.
 
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -53,14 +52,6 @@ class Layer2Status:
     done: int = 0
     escalated: int = 0
     session_name: str = ""
-    pane_tail: list[str] = field(default_factory=list)
-
-
-@dataclass
-class Layer1Status:
-    session_name: str = ""
-    alive: bool = False
-    silence_seconds: float | None = None
     pane_tail: list[str] = field(default_factory=list)
 
 
@@ -161,20 +152,14 @@ def read_middle_session(task_dir: Path) -> str:
 
 _SEPARATOR_LINE_RE = re.compile(r"^[\s\-─━═_·]*$")
 
-# Deliberately NOT trying to identify "chrome vs real content" by
-# pattern-matching specific TUI wording (Claude Code's, or anyone
-# else's) — that couples the dashboard to one agent's UI text, which
-# breaks on the next version bump or on any other cc-use-supported
-# agent. Instead: show the raw, unfiltered tail as a small teaser, and
-# let a human page through the *actual* scrollback themselves (see
-# tmux_pane_full + the in-app terminal viewer) when they want detail.
-# Both read via `capture-pane` snapshots only — the same mechanism
-# cc-use's own observation uses — never a live `attach`, so nothing
-# here can perturb the pane cc-use is watching.
+# Keep pane rendering independent of agent-specific TUI wording. Show the raw,
+# unfiltered tail as a small teaser and let a human page through the actual
+# scrollback in the terminal viewer. Both views use read-only `capture-pane`
+# snapshots and never attach a client to the running session.
 
 
 def tmux_pane_tail(session: str, lines: int = 12) -> list[str]:
-    out = _run(["tmux", "capture-pane", "-t", session, "-p", "-S", f"-{lines}"])
+    out = _run(["tmux", "capture-pane", "-t", f"={session}:", "-p", "-S", f"-{lines}"])
     if not out:
         return []
     return [l for l in out.splitlines() if l.strip()][-lines:]
@@ -185,7 +170,7 @@ def tmux_pane_full(session: str, scan: int = 2000) -> str:
     dashboard's own terminal viewer. Plain text (-p, no -e), so no ANSI
     escapes leak into the viewer widget.
     """
-    return _run(["tmux", "capture-pane", "-t", session, "-p", "-S", f"-{scan}"], timeout=8)
+    return _run(["tmux", "capture-pane", "-t", f"={session}:", "-p", "-S", f"-{scan}"], timeout=8)
 
 
 def tmux_pane_fingerprint(session: str, scan: int = 40) -> str:
@@ -195,29 +180,18 @@ def tmux_pane_fingerprint(session: str, scan: int = 40) -> str:
     """
     import hashlib
 
-    out = _run(["tmux", "capture-pane", "-t", session, "-p", "-S", f"-{scan}"])
+    out = _run(["tmux", "capture-pane", "-t", f"={session}:", "-p", "-S", f"-{scan}"])
     return hashlib.sha1(out.encode("utf-8", errors="replace")).hexdigest()
 
 
 def tmux_session_alive(session: str) -> bool:
     return (
         subprocess.run(
-            ["tmux", "has-session", "-t", session],
+            ["tmux", "has-session", "-t", f"={session}"],
             capture_output=True,
         ).returncode
         == 0
     )
-
-
-def cc_use_status(cc_use_bin: str, project: str, agent: str) -> dict:
-    out = _run(
-        [cc_use_bin, "project-status", "--project", project, "--agent", agent, "--json"],
-        timeout=8,
-    )
-    try:
-        return json.loads(out)
-    except Exception:
-        return {}
 
 
 def git_recent_commits(repo: Path, n: int = 5) -> list[str]:
@@ -409,18 +383,10 @@ def cycle_time_windows(task_dir: Path) -> list[dict]:
     return windows
 
 
-def list_watchable_sessions() -> list[str]:
-    """All live tmux sessions that look like perpetuum layers (Layer 2's
-    `middle-*` or Layer 1's `ccu-*`), for the session-picker UI. Not
-    scoped to the currently-loaded task — if other worktrees/tasks are
-    also running, their sessions show up here too.
-    """
+def list_tmux_sessions() -> list[str]:
+    """All live tmux sessions available to the read-only session picker."""
     out = _run(["tmux", "list-sessions", "-F", "#{session_name}"])
-    return sorted(
-        l.strip()
-        for l in out.splitlines()
-        if l.strip().startswith("middle-") or l.strip().startswith("ccu-")
-    )
+    return sorted(l.strip() for l in out.splitlines() if l.strip())
 
 
 # --------------------------------------------------------------------------

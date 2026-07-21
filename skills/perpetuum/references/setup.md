@@ -67,9 +67,8 @@ it's not obvious the agent will reliably reach for the right one on
 its own — e.g. several candidate skills could plausibly match the same
 description (which one does the user actually want?), or a skill needs
 a usage detail only the user knows (a specific flag, account, or mode),
-or Layer 1 runs as a different agent family than Layer 2 (`--agent
-codex` dispatched from a Claude Code Layer 2) and so may not share the
-same globally-visible skill set. If none of that applies, don't ask —
+or Layer 1 runs as a different agent family than Layer 2 and so may not
+share the same globally-visible skill set. If none of that applies, don't ask —
 default behavior (whatever's already installed, matched by the agent's
 normal skill discovery) is fine.
 
@@ -133,23 +132,25 @@ For each file in the chosen example:
    - **`prompts/2_execute.md`** — adjust the dispatch instructions to
      name the **absolute path** of the project (or worktree path) and
      which agent family Layer 1 should run as (matching the host
-     coding-CLI agent the user is on — `claude`, `codex`, etc.).
-     Dispatching to Layer 1 must be a **hard fresh-start requirement**:
-     with the current `cc-use` helper, the dispatch must require
-     `--replace` on every `delegate` call so the existing `ccu-*`
-     session is not reused. If `cc-use` changes its fresh-start
-     mechanism later, update the prompt and this setup guide in the same
-     change. Do not leave this as plain-language guidance only; Layer 2
-     must have an enforceable instruction. If a step earlier surfaced a
-     specific extra skill worth pointing Layer 1 or Layer 2 at, add that
-     here too — see "Recommending extra skills" above.
+     coding-CLI agent the user is on — `claude`, `codex`, etc.). Each
+     logical dispatch must create a uniquely named cc-use session that
+     has not appeared in an earlier item or cycle. The name should include
+     the task, cycle, item, and a collision-resistant suffix. Readiness,
+     task delivery, monitoring, and follow-up guidance for that item all
+     use the same session. Close it after Layer 2 accepts or rejects the
+     result. A fresh retry or blind judge uses another unique session. If
+     Layer 2 cannot confirm the session identity and lifecycle, it must
+     reject the result. If a step earlier surfaced a specific extra skill
+     worth pointing Layer 1 or Layer 2 at, add that here too — see
+     "Recommending extra skills" above.
    - **`trigger.sh`** — see `references/trigger.md`. Adjust:
-     - `AGENT_CMD` — defaults to Claude Code. For Codex CLI users,
-       suggest exporting `AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"`
+     - `AGENT_KIND` / `AGENT_CMD` — default to Claude Code. For Codex
+       CLI users, suggest exporting `AGENT_KIND=codex` with
+       `AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"`
        (or the safer `codex --full-auto`) before running. The trigger
-       script picks it up from the environment, so no edit to the
-       file itself is needed for users on other agents — but mention
-       it explicitly so they know.
+       script picks both up from the environment, so no edit to the file
+       itself is needed for users on other agents — but mention it
+       explicitly so they know.
      - `MAX_ITER` (default 20, but reasonable for the task)
      - `SLEEP_BETWEEN_CYCLES` (default 120s = 2 min — full throttle;
        bump to 1800 or 3600 if the user has cost concerns)

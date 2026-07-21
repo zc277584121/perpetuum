@@ -16,34 +16,19 @@ Steps:
    SCORE_BEFORE=$(python style_score.py target_corpus/ draft.md)
    ```
 
-3. Dispatch the edit. You can either:
-   - Edit `draft.md` directly (simple cases)
-> ⚠️ **Important: `cc-use` is an installed Agent Skill, not a shell command.**
-> Use it via your host agent's skill mechanism (your host will load
-> cc-use's SKILL.md and know how to dispatch the inner agent). **Do not**
-> run `cc-use` directly with the Bash tool — that bypasses the skill
-> protocol and will fail.
->
-> If your environment does not recognize `cc-use` as a skill, or `cc-use`
-> reports an inner-agent startup failure (a known issue exists for Codex
-> outer agents in `--dangerously-bypass-approvals-and-sandbox` mode where
-> cc-use's hardcoded `--ask-for-approval` / `--sandbox` flags clash —
-> upstream cc-use issue, not perpetuum): **do not fall back to
-> Bash-running cc-use, do not spawn a sub-agent yourself, do not write
-> the work into this session's context directly.** Surface it as a
-> blocked-on-environment escalation to `escalations.md` and stop the
-> cycle there. The whole point of the three-layer architecture is the
-> fresh-context inner agent; faking it locally defeats the purpose.
-   - Dispatch via the `cc-use` skill if the edit is involved. Require:
-     the project at `/<abs-path>` (absolute), the agent family matching
-     the outer agent, and a **fresh, no-memory inner session** every
-     dispatch — never a reused one, which would quietly carry over
-     memory across cycles. With the current `cc-use` helper, that means
-     every `delegate` call must use `--replace`; if `cc-use` later
-     changes its fresh-start mechanism, use the documented replacement
-     mechanism and update this prompt. Task = "rewrite the <section> of
-     draft.md to <intended change>; don't change other sections; here is
-     the target style guidance: <relevant excerpt>"
+3. Dispatch the edit through the `cc-use` skill. Use a uniquely named
+   session that has not been used by an earlier item or cycle; include
+   the task, cycle, item, and a collision-resistant suffix in the name.
+   Readiness checks, task delivery, monitoring, and follow-up guidance
+   use that same session. Task = "rewrite the <section> of draft.md to
+   <intended change>; don't change other sections; here is the target
+   style guidance: <relevant excerpt>". Close the named session after
+   reviewing the edit.
+
+   If cc-use is not available, the inner session is not ready, or its
+   identity cannot be verified, record a blocked-on-environment
+   escalation and stop the item. Do not perform involved Layer-1 work in
+   the Layer-2 session.
 
 4. Score the edit:
 

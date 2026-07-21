@@ -52,9 +52,9 @@ inbox, resolving escalations), and there's no auth in front of it.
 - **Live tab**: progress (branches on trigger type — `schedule` shows a
   round counter + ETA; `conditional`/`webhook` show an event count
   instead, since there's no fixed total for those), a session picker
-  that mirrors any live `middle-*`/`ccu-*` tmux pane read-only (pure
-  `capture-pane` snapshots — never a live `attach`, so it can't
-  perturb what `cc-use` is watching), recent Done items, open
+  that mirrors any live tmux pane read-only (pure `capture-pane`
+  snapshots — never a live `attach`, so it cannot perturb the running
+  session), recent Done items, open
   escalations (answerable via option buttons when the escalation
   listed options, always with a free-text fallback), pause/resume,
   graceful stop, and pushing a note to `inbox.md`.

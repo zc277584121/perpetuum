@@ -1,21 +1,9 @@
 # Task: execute this cycle's plan (dispatch + judge + record)
 
-> ⚠️ **Important: `cc-use` is an installed Agent Skill, not a shell command.**
-> Use it via your host agent's skill mechanism (your host will load
-> cc-use's SKILL.md and know how to dispatch the inner agent). **Do not**
-> run `cc-use` directly with the Bash tool — that bypasses the skill
-> protocol and will fail.
->
-> If your environment does not recognize `cc-use` as a skill, or `cc-use`
-> reports an inner-agent startup failure (a known issue exists for Codex
-> outer agents in `--dangerously-bypass-approvals-and-sandbox` mode where
-> cc-use's hardcoded `--ask-for-approval` / `--sandbox` flags clash —
-> upstream cc-use issue, not perpetuum): **do not fall back to
-> Bash-running cc-use, do not spawn a sub-agent yourself, do not write
-> the work into this session's context directly.** Surface it as a
-> blocked-on-environment escalation to `escalations.md` and stop the
-> cycle there. The whole point of the three-layer architecture is the
-> fresh-context inner agent; faking it locally defeats the purpose.
+> Use the `cc-use` skill for every Layer-1 operation. If cc-use is not
+> available, the inner session is not ready, or its identity cannot be
+> verified, record a blocked-on-environment escalation and stop the item.
+> Do not perform Layer-1 work in the Layer-2 session.
 Use the `cc-use` skill to delegate the actual testing work to an inner
 agent. **You do not run the tests yourself.** You plan, dispatch, judge,
 record, and escalate.
@@ -34,14 +22,11 @@ Walk through these steps:
         absolute
       - the agent family matching the outer agent (`claude`, `codex`,
         etc.)
-      - a **fresh, no-memory inner session** every dispatch — never a
-        reused one, which would quietly give Layer 1 memory of past
-        cycles and break the zero-priors guarantee this architecture
-        depends on
-      - with the current `cc-use` helper, that fresh-start requirement
-        means every `delegate` call must use `--replace`; if `cc-use`
-        later changes its fresh-start mechanism, use the documented
-        replacement mechanism and update this prompt
+      - a uniquely named session that has not been used by an earlier
+        item or cycle; include the task, cycle, item, and a
+        collision-resistant suffix in the name
+      - readiness checks, task delivery, monitoring, and follow-up
+        guidance for this item all use that same session
       - The task description: instruct the inner agent to do *ephemeral
         CLI / TUI / SDK operations*, **never** to write persistent unit
         tests. The inner agent should report what it tried, what it
@@ -52,16 +37,21 @@ Walk through these steps:
 
    b. **Judge.** When the inner agent returns:
       - **Clearly correct behavior** → mark in plan.md as PASS
-      - **Clearly a bug, simple fix** → dispatch a second inner call
-        asking it to fix; verify the fix; commit with a clean message
+      - **Clearly a bug, simple fix** → ask the same inner session to
+        fix it; verify the fix; commit with a clean message
         (no AI trailer); mark FIXED in plan.md with commit hash
       - **Bug but the fix involves a design decision** (public API
         rename, deprecation path, UX trade-off) → don't fix. Move to
         escalations.md. Mark in plan.md with `[→]`
       - **Inner agent's test was malformed / missing context** → reshape
-        the task and re-dispatch; do not mark as failure
+        the task and send the corrected request to the same named
+        session; do not mark as failure
       - **Blocked** (missing env, external dep down) → mark BLOCKED with
         reason
+
+   c. **Close.** After accepting or rejecting the result, close this
+      item's named session. A retry that requires a fresh perspective
+      starts another uniquely named session; it never reuses this one.
 
 3. Record. Every Done item in `plan.md` **must** have three fields:
 

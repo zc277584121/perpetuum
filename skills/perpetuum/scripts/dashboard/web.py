@@ -11,7 +11,7 @@ Usage:
     SSH, forward the port first: ssh -L 8420:localhost:8420 <host>
 
 Reads: plan.md / escalations.md / inbox.md / trigger.log / trigger.sh /
-_meta.md / .memsearch/*, plus live tmux panes and `cc-use project-status`.
+_meta.md / .memsearch/*, plus live tmux panes.
 
 Writes: only what a human is already documented as allowed to write by
 hand — inbox.md's Pending section, escalations.md's Resolved section,
@@ -22,7 +22,6 @@ touched.
 from __future__ import annotations
 
 import argparse
-import shutil
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -35,7 +34,7 @@ import parsers
 
 app = FastAPI(title="perpetuum dashboard")
 
-STATE = {"task_dir": None, "agent": "claude", "cc_use_bin": ""}
+STATE = {"task_dir": None}
 
 
 def task_dir() -> Path:
@@ -95,11 +94,9 @@ def api_inbox():
 
 @app.get("/api/sessions")
 def api_sessions():
-    sessions = parsers.list_watchable_sessions()
+    sessions = parsers.list_tmux_sessions()
     l2 = parsers.read_middle_session(task_dir())
-    cc = parsers.cc_use_status(STATE["cc_use_bin"], str(project_root()), STATE["agent"])
-    l1 = cc.get("config", {}).get("session") if cc.get("config", {}).get("session_available") else None
-    return {"sessions": sessions, "layer2_default": l2, "layer1_active": l1}
+    return {"sessions": sessions, "layer2_default": l2}
 
 
 @app.get("/api/pane")
@@ -179,17 +176,11 @@ def index():
 def main() -> None:
     ap = argparse.ArgumentParser(description="perpetuum web dashboard")
     ap.add_argument("--task-dir", required=True, type=Path)
-    ap.add_argument("--agent", default="claude")
-    ap.add_argument("--cc-use-bin", default=None)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8420)
     args = ap.parse_args()
 
     STATE["task_dir"] = args.task_dir.resolve()
-    STATE["agent"] = args.agent
-    STATE["cc_use_bin"] = args.cc_use_bin or shutil.which("cc-use") or str(
-        Path.home() / ".claude/skills/cc-use/scripts/cc-use"
-    )
 
     import uvicorn
 

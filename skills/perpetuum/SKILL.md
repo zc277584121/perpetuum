@@ -316,15 +316,15 @@ customize:
 - `prompts/1_explore.md` — replace generic dimension hints with this
   project's actual axes; use the user's language
 - `prompts/2_execute.md` — set the project's absolute path; adjust
-  commit-style and classification policy to the project. Dispatching
-  to Layer 1 is a hard requirement: every dispatch must use a fresh,
-  no-memory inner session. With the current `cc-use` helper, that means
-  requiring `--replace` on every `delegate` call. If `cc-use` changes
-  its fresh-start mechanism later, update this instruction at the same
-  time; do not weaken it to a best-effort request. If a specific extra
-  skill (beyond `cc-use`) would materially help this task, note that
-  too — ask adaptively, see `references/setup.md` → "Recommending extra
-  skills"
+  commit-style and classification policy to the project. Every logical
+  Layer-1 dispatch must use a uniquely named cc-use session that has not
+  been used by an earlier item or cycle. Readiness checks, task delivery,
+  monitoring, and follow-up guidance for that item stay in the same
+  session; the session is closed after Layer 2 accepts or rejects the
+  result. A retry that requires fresh context starts another uniquely
+  named session. If a specific extra skill (beyond `cc-use`) would
+  materially help this task, note that too — ask adaptively, see
+  `references/setup.md` → "Recommending extra skills"
 - `trigger.sh` — set `MIDDLE_SESSION` to something unique for this task
   line, keep its exact-match `MIDDLE_SESSION_TARGET` / `MIDDLE_PANE_TARGET`
   derivatives, adjust `MAX_ITER`, decide trigger type (schedule / conditional /
@@ -334,11 +334,11 @@ customize:
   route them through one queue/drainer or give them distinct task
   directories/worktrees and distinct `MIDDLE_SESSION` names; do not let
   multiple schedulers write into the same middle TUI. The script also
-  reads an `AGENT_CMD` env var: default is Claude Code, but users on
-  Codex / Cursor / etc. can override before launch (e.g.
-  `AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"` or the
-  safer `AGENT_CMD="codex --full-auto"`). Mention this explicitly to
-  non-Claude-Code users.
+  reads `AGENT_KIND` and `AGENT_CMD` env vars: default is Claude Code,
+  but users on Codex / Cursor / etc. can override both before launch
+  (e.g. `AGENT_KIND=codex AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"`
+  or the safer `AGENT_KIND=codex AGENT_CMD="codex --full-auto"`). Mention
+  this explicitly to non-Claude-Code users.
 - `_meta.md` — fill in worktree path, branch, parent repo, merge
   target
 - Leave `plan.md`, `inbox.md`, `escalations.md` empty (their skeletons
@@ -391,20 +391,19 @@ nohup .perpetuum/<task>/trigger.sh > /dev/null 2>&1 &
 
 Or hand the launch command to the user to start when they're ready.
 
-## Known Codex compatibility quirks (already handled)
+## Codex TUI compatibility
 
-For Codex CLI users, two tmux/TUI quirks are handled by the default
-`trigger.sh`. No user action needed; documented here so you know
-what the extra send-key lines are for:
+For Codex CLI users, the default `trigger.sh` includes two tmux/TUI
+compatibility behaviors:
 
 1. **Codex tmux "Enter doesn't commit" bug**
    ([openai/codex#12645](https://github.com/openai/codex/issues/12645)).
-   `send_prompt` uses the same five-step sequence cc-use uses
+   `send_prompt` uses a five-step submission sequence
    (`C-u` → `paste-buffer -d` → `Enter` → `C-m` → `Enter`).
 
 2. **"Create a plan?" popup on complex prompts.** Codex pops this on
    long planning-style prompts (our `1_explore.md` triggers it).
-   `send_prompt` detects Codex via `$AGENT_CMD` and sends `Escape`
+   `send_prompt` uses `AGENT_KIND=codex` to send `Escape`
    after paste to dismiss it.
 
 The execute prompts in `examples/` instruct the middle agent to
@@ -422,13 +421,12 @@ when adjusting prompts or scripts:
 2. `plan.md` is agent-maintained; humans route changes through
    `inbox.md`.
 3. Layer 1 always runs in fresh context. Every dispatch to Layer 1
-   must create a fresh, no-memory inner session — never one reused
-   from a prior cycle, which would silently give Layer 1 memory of
-   past cycles. With the current `cc-use` helper, every `delegate`
-   call must use `--replace`; if `cc-use` changes its fresh-start
-   mechanism later, update the perpetuum prompts and setup docs in the
-   same change. Do not leave this as a soft requirement that Layer 2
-   can forget to enforce.
+   starts in a uniquely named cc-use session that has never been used by
+   an earlier item or cycle. Readiness checks, execution, monitoring,
+   and follow-up guidance for one item use that same session. Layer 2
+   closes it after judging the result. A separate item, blind judge, or
+   fresh retry uses another unique name. If freshness or session
+   identity cannot be confirmed, Layer 2 rejects the result.
 4. Layer 2 is fresh per cycle. Layer 3 owns the fixed middle tmux session
    name, starts it at cycle beginning, sends the phase prompts, and kills
    it after the cycle. Persistent state belongs in `plan.md`, `inbox.md`,

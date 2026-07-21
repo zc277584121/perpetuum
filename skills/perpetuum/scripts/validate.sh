@@ -19,6 +19,31 @@ if grep -RInE 'tmux (send-keys|capture-pane|paste-buffer).*"\$MIDDLE_SESSION"' \
   exit 1
 fi
 
+if grep -RInE -- '--replace|scripts/cc-use|ccu-|cc-use (delegate|monitor|project-status|scrollback|snapshot|kill)|session_name_for_project' \
+  "$SKILL_DIR/SKILL.md" "$SKILL_DIR/references" "$SKILL_DIR/examples" \
+  "$SKILL_DIR/scripts/dashboard/parsers.py" "$SKILL_DIR/scripts/dashboard/web.py"; then
+  echo "cc-use implementation detail found in perpetuum contract" >&2
+  exit 1
+fi
+
+for prompt in "$SKILL_DIR"/examples/*/prompts/2_execute.md; do
+  grep -Fq 'uniquely named' "$prompt" || {
+    echo "missing unique Layer-1 session requirement: $prompt" >&2
+    exit 1
+  }
+  grep -Eiq 'close|closed' "$prompt" || {
+    echo "missing Layer-1 session cleanup requirement: $prompt" >&2
+    exit 1
+  }
+done
+
+for trigger in "$SKILL_DIR"/examples/*/trigger.sh; do
+  grep -Fq 'middle session unavailable' "$trigger" || {
+    echo "missing middle-session failure detection: $trigger" >&2
+    exit 1
+  }
+done
+
 if command -v tmux >/dev/null 2>&1; then
   base="perpetuum-target-check-$$"
   sibling="${base}-restart"

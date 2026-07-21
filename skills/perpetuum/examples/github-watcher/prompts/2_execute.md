@@ -1,24 +1,13 @@
 # Task: process the triaged GitHub items
 
 For each item in `plan.md` `## Pending` that the explore phase added
-> ⚠️ **Important: `cc-use` is an installed Agent Skill, not a shell command.**
-> Use it via your host agent's skill mechanism (your host will load
-> cc-use's SKILL.md and know how to dispatch the inner agent). **Do not**
-> run `cc-use` directly with the Bash tool — that bypasses the skill
-> protocol and will fail.
->
-> If your environment does not recognize `cc-use` as a skill, or `cc-use`
-> reports an inner-agent startup failure (a known issue exists for Codex
-> outer agents in `--dangerously-bypass-approvals-and-sandbox` mode where
-> cc-use's hardcoded `--ask-for-approval` / `--sandbox` flags clash —
-> upstream cc-use issue, not perpetuum): **do not fall back to
-> Bash-running cc-use, do not spawn a sub-agent yourself, do not write
-> the work into this session's context directly.** Surface it as a
-> blocked-on-environment escalation to `escalations.md` and stop the
-> cycle there. The whole point of the three-layer architecture is the
-> fresh-context inner agent; faking it locally defeats the purpose.
 this cycle, dispatch to the inner agent via `cc-use`. **You judge what
 the inner agent finds and decide what to commit / comment / escalate.**
+
+> If cc-use is not available, the inner session is not ready, or its
+> identity cannot be verified, record a blocked-on-environment
+> escalation and stop the item. Do not perform Layer-1 work in the
+> Layer-2 session.
 
 Steps:
 
@@ -27,13 +16,11 @@ Steps:
    - the project at `/<absolute-path-to-${REPO}-checkout>` — must be
      absolute
    - the agent family matching the outer agent (`claude`, `codex`, etc.)
-   - a **fresh, no-memory inner session** every dispatch — never a
-     reused one, which would quietly let Layer 1 accumulate memory
-     across items/cycles
-   - with the current `cc-use` helper, that fresh-start requirement
-     means every `delegate` call must use `--replace`; if `cc-use`
-     later changes its fresh-start mechanism, use the documented
-     replacement mechanism and update this prompt
+   - a uniquely named session that has not been used by an earlier
+     item or cycle; include the task, cycle, item, and a
+     collision-resistant suffix in the name
+   - readiness checks, task delivery, monitoring, and follow-up
+     guidance for this item all use that same session
    - Task: read PR/issue #N, attempt the relevant investigation
      (reproduce, read diff, check the docs, etc.), report back with:
      - what they found
@@ -46,7 +33,7 @@ Steps:
 2. When the inner agent returns, classify:
 
    **a. Clear bug, simple obvious fix:**
-   - Dispatch a second inner call asking to implement the fix
+   - Ask the same inner session to implement the fix
    - Verify locally
    - Commit with clean message (no AI trailer)
    - Optionally push to a branch and have inner agent draft a PR comment
@@ -69,8 +56,12 @@ Steps:
    - Mark `[→]` in plan.md
 
    **e. Inner agent couldn't determine:**
-   - Reshape and re-dispatch with more context, OR
+   - Send more context to the same named session, OR
    - Mark `[BLOCKED]` with what's missing
+
+   After accepting or rejecting the item, close its named session. A
+   retry that requires fresh context starts another uniquely named
+   session.
 
 3. Record. Every Done item must have:
 

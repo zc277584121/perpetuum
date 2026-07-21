@@ -120,11 +120,11 @@ async function loadSessions() {
   const picker = $("#session-picker");
   const prev = picker.value;
   picker.innerHTML = "";
-  const preferred = info.layer1_active || info.layer2_default;
+  const preferred = info.layer2_default;
   info.sessions.forEach((s) => {
     const opt = document.createElement("option");
     opt.value = s;
-    opt.textContent = s === info.layer1_active ? s + "  (Layer 1, active)" : s;
+    opt.textContent = s === info.layer2_default ? s + "  (Layer 2)" : s;
     picker.appendChild(opt);
   });
   picker.value = info.sessions.includes(prev) ? prev : (info.sessions.includes(preferred) ? preferred : info.sessions[0]);

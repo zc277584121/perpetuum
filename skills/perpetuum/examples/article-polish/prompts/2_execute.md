@@ -8,36 +8,24 @@ Steps:
    blind judge):
    - Copy current text of the target section into a string `BEFORE_TEXT`
 
-> ⚠️ **Important: `cc-use` is an installed Agent Skill, not a shell command.**
-> Use it via your host agent's skill mechanism (your host will load
-> cc-use's SKILL.md and know how to dispatch the inner agent). **Do not**
-> run `cc-use` directly with the Bash tool — that bypasses the skill
-> protocol and will fail.
->
-> If your environment does not recognize `cc-use` as a skill, or `cc-use`
-> reports an inner-agent startup failure (a known issue exists for Codex
-> outer agents in `--dangerously-bypass-approvals-and-sandbox` mode where
-> cc-use's hardcoded `--ask-for-approval` / `--sandbox` flags clash —
-> upstream cc-use issue, not perpetuum): **do not fall back to
-> Bash-running cc-use, do not spawn a sub-agent yourself, do not write
-> the work into this session's context directly.** Surface it as a
-> blocked-on-environment escalation to `escalations.md` and stop the
-> cycle there. The whole point of the three-layer architecture is the
-> fresh-context inner agent; faking it locally defeats the purpose.
-3. Apply the edit. Either directly or via cc-use dispatch (preferred
-   for non-trivial edits — the fresh inner agent has no priors). If you
-   dispatch, require a fresh, no-memory inner session. With the current
-   `cc-use` helper, that means every `delegate` call must use
-   `--replace`; if `cc-use` later changes its fresh-start mechanism,
-   use the documented replacement mechanism and update this prompt.
+> Use the `cc-use` skill for the editor and blind judge. If cc-use is not
+> available, an inner session is not ready, or its identity cannot be
+> verified, record a blocked-on-environment escalation and stop the
+> cycle. Do not perform Layer-1 work in the Layer-2 session.
+
+3. Dispatch the edit to a uniquely named cc-use session that has not
+   been used by an earlier item or cycle. Include the task, cycle, item,
+   and a collision-resistant suffix in the name. Readiness checks, task
+   delivery, monitoring, and follow-up guidance for this edit all use
+   that same session. After reviewing the editor's result, close the
+   editor session.
 
 4. Save the new text as `AFTER_TEXT`.
 
 5. **Blind judge** via a separate cc-use dispatch. This is the
    discriminator. The fresh inner agent has no context of what edit
-   was made. This dispatch also requires a fresh, no-memory session;
-   with the current `cc-use` helper, every `delegate` call must use
-   `--replace`. Ask:
+   was made. Use another uniquely named session that has never been
+   used by an earlier item, editor, or judge. Ask:
 
    > Here are two versions of the same paragraph from an article about
    > [topic]. Label them A and B in random order (you decide which is
@@ -54,6 +42,7 @@ Steps:
 
    The dispatch must include the article's overall topic / argument
    so the judge isn't picking purely on stylistic local quality.
+   Close the judge session after recording its verdict.
 
 6. Decision based on judge's verdict:
    - **Judge picks AFTER** → commit:
