@@ -1,283 +1,53 @@
-# Setup: initializing a new perpetuum task
+# 初始化项目
 
-This reference walks you through creating a new `.perpetuum/<task>/`
-directory in the user's project. Read this when the user wants to
-start a new task.
+## 前置检查
 
-## Prerequisites checked already?
+确认以下能力可用：
 
-Before you reach this file, `SKILL.md` already had you confirm:
-- `cc-use` skill is installed
-- `tmux` is installed
-- The task passes the **suitability gate**
+- 当前 Agent 能加载 `perpetuum` 与 `cc-use` Skill；
+- `tmux` 可用；
+- 对应的交互式 Codex 或 Claude Code TUI 可启动；
+- Python 3.8 或更高版本可用；
+- MemSearch 若已安装则可正常检索。
 
-If you skipped the suitability gate, go back to `SKILL.md` and walk
-through it now. It is not optional.
+不要在初始化过程中更新 Agent、Skill、插件或认证。版本不兼容时记录问题并让用户决定。
 
-## The suitability checklist (internal — don't recite this to the user)
+## 初始化步骤
 
-Five dimensions. For each, decide silently whether the user's own
-description already answers it. If not, and if the answer would
-change how the task gets set up, ask about it — one question, in
-your own words, fit to the task and the user's language. Don't read
-this list to the user as a form, and don't ask a dimension whose
-answer wouldn't change anything.
-
-1. **Goal narrowness.** Is there a bounded scope, or is it "make this
-   better" with no boundary? *Unresolved example: "watch for
-   problems" — doesn't say what kind. Ask what categories of finding
-   actually matter here.*
-2. **Judgeable signal.** Is there something Layer 2 can grade —
-   pass/fail, a number that moves, a diff a human could review? *If
-   the user gives no criterion, ask what "done" or "better" looks
-   like for one item.*
-3. **Step granularity.** Does the task decompose into many small,
-   independent units, or is it one atomic delivery? *If it sounds
-   monolithic, ask whether it can be split — module-by-module,
-   PR-by-PR, trial-by-trial.*
-4. **Error tolerance.** Can a wrong Layer-1 step be caught and rolled
-   back (a commit), or is a single mistake catastrophic (prod
-   deploy, real email, money movement)? *If any step sounds
-   irreversible, ask how it should be gated — PR instead of direct
-   push, dry-run instead of a live call, etc.*
-5. **Time horizon.** Does this need to run for hours or days across
-   many cycles, or is it actually a 10-minute task? *If unclear, ask
-   how long they expect this to take, or how many cycles they're
-   picturing.*
-
-Skip any dimension the user's first message already answers clearly.
-Ask the remaining ones one at a time — never all five in one message,
-and stop asking once the borderline cases (see `SKILL.md`) are
-resolved either way.
-
-## Recommending extra skills for Layer 1 / Layer 2 (ask adaptively — not every task needs this)
-
-Layer 1 (the `cc-use`-dispatched inner agent) and Layer 2 (the
-per-cycle middle agent in the `tmux` session) are both real, running
-agent instances — they get whatever skills are installed and visible in
-their environment, the same way any other session would. Most of the
-time this needs no attention: skills are typically installed globally
-and shared across sessions, and a well-described skill gets picked up
-by the normal skill-matching an agent already does on its own. Don't
-turn this into a mandatory setup question.
-
-Ask about it only when the task shape makes it plausible that a
-*specific* non-default skill would materially change the outcome, and
-it's not obvious the agent will reliably reach for the right one on
-its own — e.g. several candidate skills could plausibly match the same
-description (which one does the user actually want?), or a skill needs
-a usage detail only the user knows (a specific flag, account, or mode),
-or Layer 1 runs as a different agent family than Layer 2 and so may not
-share the same globally-visible skill set. If none of that applies, don't ask —
-default behavior (whatever's already installed, matched by the agent's
-normal skill discovery) is fine.
-
-If the user does name something, record which skill applies to which
-layer (Layer 1, Layer 2, or both) — write it into the copied
-`prompts/1_explore.md` / `prompts/2_execute.md` during Step 5 below as
-a one-line pointer ("if the `<skill>` skill is available, prefer it
-for `<X>`"), the same way project-specific dimension hints already get
-written in. This is a content edit to the prompt, not a new mechanism.
-
-## Step 1 — Pick an example as starting point
-
-Look at `examples/` and find the closest match:
-
-| User's task shape | Closest example |
-|---|---|
-| Find bugs, fuzz, scan for vulnerabilities, error UX gaps | `adversarial-testing/` |
-| Watch GitHub issues/PRs/etc and act on them | `github-watcher/` |
-| Match writing style to a reference corpus | `style-distill/` |
-| Iteratively improve a single document | `article-polish/` |
-| Scan codebase for logging/observability gaps | `observability-gap/` |
-
-If nothing is an exact fit, pick the closest and adapt it during the
-next steps. Do not write from scratch — examples encode many small
-lessons (prompt structure, file conventions, sync mechanism).
-
-## Step 2 — Decide on git worktree mode
-
-Ask the user: are there other perpetuum tasks already running on this
-project, or do they plan to run several in parallel?
-
-- **No / just this one** → set up directly in the project root. Task
-  files go in `<project>/.perpetuum/<task>/`. Commits go to the current
-  branch.
-- **Yes / multiple lines** → use git worktree. See
-  `references/worktree.md` for the full procedure.
-
-## Step 3 — Choose a task name
-
-Suggest a short, hyphenated, English name based on what the task does.
-The directory will be `.perpetuum/<task-name>/`. Examples:
-`adversarial-testing`, `pr-watcher`, `style-distill-karpathy`,
-`docs-polish`, `observability-audit`.
-
-## Step 4 — Create the directory
+1. 解析用户指定或当前所在的项目目录，取得绝对路径。
+2. 默认继承当前调用 Perpetuum 的 Agent 类型。只有用户明确要求时才覆盖为其他 Agent。
+3. 若 MemSearch 可用，检索这个项目的历史目标、近期进展、用户偏好、可用资源、边界、已做决定和可能的下一步。
+4. 检查项目中的说明文档、配置、最近状态和可验证证据。不要把 MemSearch 记忆直接当成事实。
+5. 起草 `goal.md`、`plan.md` 和 `history.md`。先向用户展示摘要，只询问无法可靠推断且会改变行为的内容，通常是工作时间窗口和明确边界。
+6. 用户确认后，调用单一入口注册项目：
 
 ```bash
-mkdir -p <project>/.perpetuum/<task-name>/state
+<skill-directory>/scripts/perpetuum project add <project-path> \
+  --name "<project-name>" \
+  --agent <codex-or-claude> \
+  --window "<HH:MM-HH:MM>"
 ```
 
-## Step 5 — Copy and adapt files from the example
-
-For each file in the chosen example:
-
-1. Copy to `.perpetuum/<task-name>/`
-2. Customize. Specifically:
-   - **`prompts/1_explore.md`** — rewrite to describe the task's actual
-     scope. Use the example's structure (read history, plan new items,
-     append to `plan.md`, write done-flag) but replace the task-specific
-     instructions. Use the user's language.
-   - **`prompts/2_execute.md`** — adjust the dispatch instructions to
-     name the **absolute path** of the project (or worktree path) and
-     which agent family Layer 1 should run as (matching the host
-     coding-CLI agent the user is on — `claude`, `codex`, etc.). Each
-     logical dispatch must create a uniquely named cc-use session that
-     has not appeared in an earlier item or cycle. The name should include
-     the task, cycle, item, and a collision-resistant suffix. Readiness,
-     task delivery, monitoring, and follow-up guidance for that item all
-     use the same session. Close it after Layer 2 accepts or rejects the
-     result. A fresh retry or blind judge uses another unique session. If
-     Layer 2 cannot confirm the session identity and lifecycle, it must
-     reject the result. If a step earlier surfaced a specific extra skill
-     worth pointing Layer 1 or Layer 2 at, add that here too — see
-     "Recommending extra skills" above.
-   - **`trigger.sh`** — see `references/trigger.md`. Adjust:
-     - `AGENT_KIND` / `AGENT_CMD` — default to Claude Code. For Codex
-       CLI users, suggest exporting `AGENT_KIND=codex` with
-       `AGENT_CMD="codex --dangerously-bypass-approvals-and-sandbox"`
-       (or the safer `codex --full-auto`) before running. The trigger
-       script picks both up from the environment, so no edit to the file
-       itself is needed for users on other agents — but mention it
-       explicitly so they know.
-     - `MAX_ITER` (default 20, but reasonable for the task)
-     - `SLEEP_BETWEEN_CYCLES` (default 120s = 2 min — full throttle;
-       bump to 1800 or 3600 if the user has cost concerns)
-     - `WAIT_PHASE_TIMEOUT` / `SILENCE_THRESHOLD`
-     - `MIDDLE_SESSION` name (e.g. `middle-adv-<project-short>`). This
-       name is fixed per task line and reused across cycles, but Layer 3
-       kills the tmux session after each cycle and starts it fresh for
-       the next one. For independent trigger families, use separate task
-       directories/worktrees or route events through one queue; do not
-       let multiple schedulers target the same middle session. Keep the
-       derived `MIDDLE_SESSION_TARGET="=$MIDDLE_SESSION"` and
-       `MIDDLE_PANE_TARGET="=$MIDDLE_SESSION:"` lines; they force exact
-       tmux matching and prevent a same-prefix sibling from being mistaken
-       for this task's middle session.
-     - Trigger type (schedule, conditional, webhook)
-   - **`plan.md`** — start empty with `## Pending` and `## Done`
-     sections.
-   - **`inbox.md`** — start with the `## Pending` and `## Processed` (or
-     English equivalent) skeleton.
-   - **`escalations.md`** — start empty with `## Open` and `## Resolved`.
-   - **`_meta.md`** — fill in:
-
-```markdown
-# Task metadata
-
-- **task name**: <task-name>
-- **created**: <ISO date>
-- **worktree path**: <abs path>
-- **branch**: <current git branch>
-- **started from**: <branch>@<sha>
-- **parent repo**: <abs path of parent repo>
-- **merge target**: <branch>   (where the user wants to merge back, if applicable)
-- **trigger type**: schedule | conditional | webhook
-```
-
-## Step 6 — Make `trigger.sh` executable
+7. 用确认后的内容替换自动生成的 `goal.md`、`plan.md`、`history.md`，再检查其他通信文件的标题和项目背景。
+8. 启动服务并展示前端地址：
 
 ```bash
-chmod +x .perpetuum/<task-name>/trigger.sh
+<skill-directory>/scripts/perpetuum start
 ```
 
-## Step 7 — Suggest .gitignore
+## Goal 的要求
 
-```bash
-echo '.perpetuum/' >> <project>/.gitignore
-```
+`goal.md` 不是一句口号。根据项目需要写清：
 
-…unless the user wants the perpetuum state tracked (team-shared usage,
-historical record). Ask, then act.
+- 长期目标和为什么值得持续推进；
+- 当前背景与已知进度；
+- 可用环境、数据、服务、机器和其他资源；
+- 禁止触碰的边界、成本底线、安全限制和业务约束；
+- 在长期目标之外必须兼顾的具体要求；
+- 什么证据能够说明进展真实、什么情况需要人类判断。
 
-## Step 7.5 — Confirm cost / rate-limit awareness explicitly
+Explorer 后续产生的每一条具体工作统一称为 Task。
 
-The default `SLEEP_BETWEEN_CYCLES` is **2 minutes** — designed for full
-throttle. Before launch, walk through the cost implications with the
-user out loud:
+## 项目标识
 
-- One cycle ≈ several inner-agent dispatches via `cc-use` (the bulk of
-  the spend) plus the middle agent's prompt 1 + prompt 2 turns
-- At 2-minute cadence with `MAX_ITER=20`, the loop will burn through 20
-  cycles in a few hours
-- Ask:
-  - "Do you have token budget / API quota for ~20 cycles at full
-    cadence on this account?"
-  - "Are you on a usage-based plan (cost matters) or a flat plan
-    (rate limits matter)?"
-  - "Will you babysit the first few cycles, or are you launching and
-    walking away?"
-- If they hesitate, suggest:
-  - Bump `SLEEP_BETWEEN_CYCLES` to 1800 (30 min) or 3600 (1 hour)
-  - Reduce `MAX_ITER` (e.g. start with 5)
-  - Use the `github-watcher` style **conditional** trigger if their
-    task is actually event-driven (only fires when there's real new
-    work — much cheaper than schedule)
-
-This is a one-minute conversation that prevents a "why did this cost
-$X overnight" surprise. Do not skip it. Even users who said "yes I
-understand the cost" once may not have understood the actual rate.
-
-## Step 8 — Pre-flight: trial one cycle if the user is uncertain
-
-For first-time users, suggest a quick trial run with `MAX_ITER=1`
-before unleashing 20. After 1 cycle they can see whether the prompts
-produced sensible output, then bump MAX_ITER back up.
-
-```bash
-# Temporarily set MAX_ITER=1
-sed -i.bak 's/^MAX_ITER=.*/MAX_ITER=1/' .perpetuum/<task>/trigger.sh
-.perpetuum/<task>/trigger.sh
-# Inspect plan.md, escalations.md, the git log
-# Restore
-mv .perpetuum/<task>/trigger.sh.bak .perpetuum/<task>/trigger.sh
-```
-
-## Step 9 — Walk the user through the "after setup" briefing
-
-This is the most important step. The user is about to leave a coding
-agent unattended on their codebase. They need to understand the
-contract. Walk through the five points listed in the SKILL.md
-"After setup: what to tell the user" section — in their language.
-
-Do not skip this. A user who doesn't know they can edit `inbox.md` or
-touch `.paused` will end up `pkill`-ing the whole thing in panic at 3am.
-
-## Step 10 — Launch (or hand off)
-
-Two options. Ask the user which they prefer.
-
-```bash
-# A: launch now in background
-nohup .perpetuum/<task>/trigger.sh > /dev/null 2>&1 &
-
-# B: hand the launch command to the user, they start when ready
-echo "When you're ready:  nohup .perpetuum/<task>/trigger.sh &"
-```
-
-## Common adjustments after first cycle
-
-After cycle 1 the user often wants to tweak:
-
-- **Done-flag reminder is not strong enough** in `prompts/2_execute.md` →
-  raise the warning, put it at top *and* bottom of the prompt
-- **Prompt 1 produces too many TODOs / too few** → adjust the
-  Cartesian-product/dimension language
-- **Layer 1 is "fixing" things you wanted reviewed first** → add a
-  list of "must escalate, do not auto-fix" categories to `prompts/2_execute.md`
-- **Layer 1 keeps trying the same blocked dimension** → add a "if
-  category X has been BLOCKED before, skip" instruction to `prompts/1_explore.md`
-
-These adjustments are normal. Make them with the user, don't push your
-own preferences.
+默认项目 ID 由目录名和绝对路径哈希组成，避免同名目录冲突。全局 Harness 通过 `project.yaml` 中的绝对路径映射到实际项目，不创建镜像目录或软链接。

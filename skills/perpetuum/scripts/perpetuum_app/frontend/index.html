@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Perpetuum 控制台</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">∞</div>
+        <div>
+          <h1>Perpetuum</h1>
+          <p>长期 Agent 队伍</p>
+        </div>
+      </div>
+
+      <section class="service-card">
+        <div class="section-label">Runner</div>
+        <div class="service-line">
+          <span id="service-dot" class="status-dot"></span>
+          <strong id="service-status">正在连接</strong>
+        </div>
+        <dl id="service-details"></dl>
+      </section>
+
+      <div class="project-heading">
+        <span class="section-label">项目</span>
+        <button id="refresh-button" class="icon-button" title="刷新">↻</button>
+      </div>
+      <nav id="project-list" class="project-list"></nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">当前项目</div>
+          <h2 id="project-name">请选择一个项目</h2>
+          <p id="project-path"></p>
+        </div>
+        <div id="project-controls" class="controls hidden">
+          <button data-action="run" class="button primary">立即运行</button>
+          <button data-action="pause" class="button" id="pause-button">暂停</button>
+        </div>
+      </header>
+
+      <div id="empty-state" class="empty-state">
+        <div class="empty-symbol">⌁</div>
+        <h3>还没有选中项目</h3>
+        <p>从左侧选择项目，查看 Goal、Task、日报和运行健康。</p>
+      </div>
+
+      <div id="project-view" class="hidden">
+        <section class="metrics" id="metrics"></section>
+
+        <section class="workspace">
+          <div class="document-panel">
+            <div class="document-tabs" id="document-tabs"></div>
+            <pre id="document-content">正在加载……</pre>
+          </div>
+
+          <aside class="action-panel">
+            <section class="action-card">
+              <div class="section-label">注入业务指令</div>
+              <p>下一次 Project Supervisor 激活时会读取这条指令。</p>
+              <textarea id="inbox-text" rows="5" placeholder="说明优先级、边界、资源或新的方向……"></textarea>
+              <button id="send-inbox" class="button primary full">写入 Inbox</button>
+            </section>
+
+            <section class="action-card">
+              <div class="section-label">工作时间窗口</div>
+              <p>多个窗口用逗号分隔。窗口只限制新 Task 开始，不会中断正在执行的 Task。</p>
+              <input id="window-text" type="text" placeholder="00:00-06:00, 18:00-24:00">
+              <button id="save-windows" class="button full">保存时间窗口</button>
+            </section>
+
+            <section class="action-card">
+              <div class="section-label">回复 Agent</div>
+              <p>业务选择写入 Questions；环境和进程问题写入 Escalations。</p>
+              <select id="response-channel">
+                <option value="questions">Questions · 业务判断</option>
+                <option value="escalations">Escalations · 管控问题</option>
+              </select>
+              <textarea id="response-text" rows="5" placeholder="写清你的决定和必要补充……"></textarea>
+              <button id="send-response" class="button full">追加回复</button>
+            </section>
+          </aside>
+        </section>
+      </div>
+
+      <div id="toast" class="toast"></div>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

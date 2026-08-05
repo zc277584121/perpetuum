@@ -1,0 +1,370 @@
+"""Command-line entry point for Perpetuum."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+from . import storage
+from .server import global_status, process_alive
+
+
+def load_state(home: Path) -> Dict[str, Any]:
+    value = storage.read_json(
+        storage.runner_state_path(home),
+        storage.default_runner_state(),
+    )
+    return value if isinstance(value, dict) else storage.default_runner_state()
+
+
+def service_pid(home: Path) -> Optional[int]:
+    pid = load_state(home).get("service", {}).get("pid")
+    return pid if isinstance(pid, int) and process_alive(pid) else None
+
+
+def update_service_config(home: Path, **changes: Any) -> Dict[str, Any]:
+    config = storage.ensure_home(home)
+    service = config.setdefault("service", {})
+    service.update(changes)
+    storage.write_json(storage.activation_path(home), config)
+    return config
+
+
+def start_service(home: Path, host: Optional[str], port: Optional[int]) -> int:
+    storage.ensure_home(home)
+    existing = service_pid(home)
+    if existing:
+        state = load_state(home)
+        url = state.get("service", {}).get("url", "")
+        print(f"Perpetuum 已在运行，PID {existing}，前端：{url}")
+        return 0
+
+    changes: Dict[str, Any] = {
+        "stop_requested": False,
+        "restart_requested": False,
+    }
+    if host:
+        changes["host"] = host
+    if port:
+        changes["port"] = port
+    config = update_service_config(home, **changes)
+
+    scripts_dir = Path(__file__).resolve().parents[1]
+    environment = os.environ.copy()
+    current_python_path = environment.get("PYTHONPATH")
+    environment["PYTHONPATH"] = (
+        f"{scripts_dir}:{current_python_path}"
+        if current_python_path
+        else str(scripts_dir)
+    )
+    log_path = storage.runner_events_path(home)
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "perpetuum_app.runner",
+            "--home",
+            str(home),
+        ],
+        cwd=str(scripts_dir),
+        env=environment,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        close_fds=True,
+    )
+
+    deadline = time.time() + 8
+    while time.time() < deadline:
+        pid = service_pid(home)
+        if pid:
+            service = config.get("service", {})
+            print(
+                f"Perpetuum 已启动，PID {pid}，前端："
+                f"http://{service.get('host', '127.0.0.1')}:{service.get('port', 8765)}"
+            )
+            return 0
+        if process.poll() is not None:
+            break
+        time.sleep(0.2)
+    print(f"Perpetuum 启动失败，请检查 {log_path}", file=sys.stderr)
+    return 1
+
+
+def stop_service(home: Path, force: bool) -> int:
+    pid = service_pid(home)
+    if not pid:
+        print("Perpetuum 当前没有运行。")
+        return 0
+    if force:
+        os.kill(pid, signal.SIGTERM)
+        print("已请求强制停止；未完成的顶层 session 会被终止并记录管控异常。")
+        return 0
+
+    update_service_config(home, stop_requested=True, restart_requested=False)
+    deadline = time.time() + 8
+    while time.time() < deadline:
+        if not service_pid(home):
+            print("Perpetuum 已停止。")
+            return 0
+        time.sleep(0.25)
+    state = load_state(home)
+    active = state.get("active_root") or state.get("active_reporter")
+    if active:
+        print(
+            "Perpetuum 正在等待当前顶层工作完成，之后会自动停止。"
+            f" 当前 session：{active.get('session', 'unknown')}"
+        )
+    else:
+        print("已提交停止请求，服务将在下一次心跳退出。")
+    return 0
+
+
+def restart_service(home: Path, host: Optional[str], port: Optional[int]) -> int:
+    pid = service_pid(home)
+    if not pid:
+        return start_service(home, host, port)
+    changes: Dict[str, Any] = {
+        "restart_requested": True,
+        "stop_requested": False,
+    }
+    if host:
+        changes["host"] = host
+    if port:
+        changes["port"] = port
+    update_service_config(home, **changes)
+    state = load_state(home)
+    active = state.get("active_root") or state.get("active_reporter")
+    if active:
+        print(
+            "已请求重启。服务会等待当前顶层工作完成后原地重启；"
+            f"当前 session：{active.get('session', 'unknown')}"
+        )
+    else:
+        print("已请求重启，服务将在下一次心跳原地重启。")
+    return 0
+
+
+def print_status(home: Path, as_json: bool) -> int:
+    status = global_status(home)
+    if as_json:
+        print(json.dumps(status, ensure_ascii=False, indent=2))
+        return 0
+    service = status["runner"].get("service", {})
+    alive = service.get("alive", False)
+    print(f"服务：{'运行中' if alive else '已停止'}")
+    if alive:
+        print(f"PID：{service.get('pid')}")
+        print(f"前端：{service.get('url')}")
+    active_root = status["runner"].get("active_root")
+    active_reporter = status["runner"].get("active_reporter")
+    print(f"Root：{active_root.get('session') if active_root else '无'}")
+    print(f"Reporter：{active_reporter.get('session') if active_reporter else '无'}")
+    print(f"项目数：{len(status['projects'])}")
+    for project in status["projects"]:
+        pause = "（已暂停）" if project.get("paused") else ""
+        print(
+            f"- {project['id']}: {project['name']} · "
+            f"{project.get('status', 'unknown')}{pause}"
+        )
+    if status["runner"].get("last_error"):
+        print(f"最近错误：{status['runner']['last_error']}")
+    return 0
+
+
+def project_add(args: argparse.Namespace, home: Path) -> int:
+    try:
+        project_id = storage.register_project(
+            home=home,
+            path=args.path,
+            name=args.name,
+            project_id=args.id,
+            agent=args.agent,
+            window=args.window,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(f"项目已注册：{project_id}")
+    print(f"Harness：{storage.project_dir(home, project_id)}")
+    return 0
+
+
+def project_list(home: Path, as_json: bool) -> int:
+    activation = storage.ensure_home(home)
+    projects = [
+        {
+            "project": storage.load_project(home, project_id),
+            "activation": activation.get("projects", {}).get(project_id, {}),
+            "runtime": storage.load_project_state(home, project_id),
+        }
+        for project_id in storage.list_project_ids(home)
+    ]
+    if as_json:
+        print(json.dumps(projects, ensure_ascii=False, indent=2))
+        return 0
+    if not projects:
+        print("尚未注册项目。")
+        return 0
+    for item in projects:
+        project = item["project"] or {}
+        activation_entry = item["activation"]
+        state = item["runtime"]
+        paused = "，已暂停" if activation_entry.get("paused") else ""
+        print(
+            f"{project.get('id')}: {project.get('name')} · "
+            f"{state.get('status', 'unknown')}{paused}\n"
+            f"  {project.get('path')}\n"
+            f"  时间窗口：{', '.join(activation_entry.get('windows', []))}"
+        )
+    return 0
+
+
+def project_control(home: Path, project_id: str, action: str) -> int:
+    try:
+        storage.update_project_control(home, project_id, action)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    labels = {"pause": "暂停", "resume": "恢复", "run": "立即运行"}
+    print(f"已提交项目{labels[action]}请求：{project_id}")
+    return 0
+
+
+def project_window(home: Path, project_id: str, windows: Any) -> int:
+    try:
+        storage.set_project_windows(home, project_id, list(windows))
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(f"已更新时间窗口：{project_id} · {', '.join(windows)}")
+    return 0
+
+
+def request_report(home: Path) -> int:
+    config = storage.ensure_home(home)
+    report = config.setdefault("report", {})
+    report["force"] = True
+    storage.write_json(storage.activation_path(home), config)
+    print("已请求生成日报。")
+    return 0
+
+
+def doctor(home: Path) -> int:
+    storage.ensure_home(home)
+    checks = {
+        "python3": sys.version.split()[0],
+        "tmux": shutil.which("tmux"),
+        "codex": shutil.which("codex"),
+        "claude": shutil.which("claude"),
+        "home": str(home),
+        "activation": str(storage.activation_path(home)),
+    }
+    failed = False
+    for name, value in checks.items():
+        ok = bool(value)
+        print(f"{'✓' if ok else '✗'} {name}: {value or '未找到'}")
+        if name in {"tmux", "python3"} and not ok:
+            failed = True
+    if not checks["codex"] and not checks["claude"]:
+        print("✗ 至少需要一个可用的交互式 Agent TUI")
+        failed = True
+    print("检查不会更新 Agent、Skill、插件或认证。")
+    return 1 if failed else 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="perpetuum")
+    parser.add_argument("--home", type=Path, help="覆盖默认的 ~/.perpetuum")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("init", help="初始化运行时目录")
+
+    start = subparsers.add_parser("start", help="启动 Runner 和前端")
+    start.add_argument("--host")
+    start.add_argument("--port", type=int)
+
+    stop = subparsers.add_parser("stop", help="停止服务")
+    stop.add_argument("--force", action="store_true")
+
+    restart = subparsers.add_parser("restart", help="重启服务")
+    restart.add_argument("--host")
+    restart.add_argument("--port", type=int)
+
+    status = subparsers.add_parser("status", help="查看整体状态")
+    status.add_argument("--json", action="store_true")
+
+    subparsers.add_parser("doctor", help="检查本地依赖")
+    subparsers.add_parser("report", help="立即请求日报")
+
+    project = subparsers.add_parser("project", help="管理项目")
+    project_subparsers = project.add_subparsers(dest="project_command", required=True)
+
+    add = project_subparsers.add_parser("add", help="注册项目")
+    add.add_argument("path", type=Path)
+    add.add_argument("--id")
+    add.add_argument("--name")
+    add.add_argument("--agent", choices=("codex", "claude"))
+    add.add_argument("--window", default="00:00-24:00")
+
+    list_parser = project_subparsers.add_parser("list", help="列出项目")
+    list_parser.add_argument("--json", action="store_true")
+
+    for action, help_text in (
+        ("pause", "暂停项目的新 Task"),
+        ("resume", "恢复项目"),
+        ("run", "立即触发项目"),
+    ):
+        action_parser = project_subparsers.add_parser(action, help=help_text)
+        action_parser.add_argument("project_id")
+
+    window = project_subparsers.add_parser("window", help="设置项目时间窗口")
+    window.add_argument("project_id")
+    window.add_argument("windows", nargs="+", help="例如 00:00-06:00")
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+    home = storage.runtime_home(args.home)
+
+    if args.command == "init":
+        storage.ensure_home(home)
+        print(f"Perpetuum 运行时已初始化：{home}")
+        return
+    if args.command == "start":
+        raise SystemExit(start_service(home, args.host, args.port))
+    if args.command == "stop":
+        raise SystemExit(stop_service(home, args.force))
+    if args.command == "restart":
+        raise SystemExit(restart_service(home, args.host, args.port))
+    if args.command == "status":
+        raise SystemExit(print_status(home, args.json))
+    if args.command == "doctor":
+        raise SystemExit(doctor(home))
+    if args.command == "report":
+        raise SystemExit(request_report(home))
+    if args.command == "project":
+        if args.project_command == "add":
+            raise SystemExit(project_add(args, home))
+        if args.project_command == "list":
+            raise SystemExit(project_list(home, args.json))
+        if args.project_command == "window":
+            raise SystemExit(project_window(home, args.project_id, args.windows))
+        raise SystemExit(
+            project_control(home, args.project_id, args.project_command)
+        )
+
+
+if __name__ == "__main__":
+    main()

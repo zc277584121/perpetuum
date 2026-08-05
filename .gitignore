@@ -3,9 +3,8 @@ __pycache__/
 *.pyc
 *.pyo
 
-# dashboard's local uv virtualenv (optional companion tool, see
-# skills/perpetuum/references/dashboard.md)
-skills/perpetuum/scripts/dashboard/.venv/
+# Local uv virtualenv for runtime development
+skills/perpetuum/scripts/.venv/
 
 # Editor / OS noise
 .DS_Store
