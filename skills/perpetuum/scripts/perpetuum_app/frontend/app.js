@@ -442,7 +442,7 @@ function renderProject() {
     : "无";
   replaceDefinitions(document.getElementById("agent-details"), [
     ["Agent", project.agent?.kind || "未配置"],
-    ["启动命令", project.agent?.command || "未配置"],
+    ["启动方式", "Runner 统一管理"],
     ["活跃会话", sessionSummary],
     ["项目状态", statusLabel(displayStatus)],
     ["最近活动", formatTime(summary.last_activity_at)],

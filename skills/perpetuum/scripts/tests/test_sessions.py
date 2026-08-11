@@ -3,19 +3,42 @@ import shutil
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from perpetuum_app import sessions
 
 
 @unittest.skipUnless(shutil.which("tmux"), "tmux is required")
 class SessionTests(unittest.TestCase):
+    def test_agent_commands_use_resolved_binaries_and_unattended_flags(self):
+        binaries = {
+            "codex": "/opt/bin/codex",
+            "claude": "/opt/bin/claude",
+        }
+        with mock.patch(
+            "perpetuum_app.sessions.shutil.which",
+            side_effect=binaries.get,
+        ):
+            self.assertEqual(
+                sessions.agent_command("codex"),
+                [
+                    "/opt/bin/codex",
+                    "--no-alt-screen",
+                    "--dangerously-bypass-approvals-and-sandbox",
+                ],
+            )
+            self.assertEqual(
+                sessions.agent_command("claude"),
+                ["/opt/bin/claude", "--dangerously-skip-permissions"],
+            )
+
     def test_prompt_delivery_uses_unique_tmux_session(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             marker = root / "received.txt"
             session = sessions.launch_session(
                 role="smoke",
-                command="bash",
+                command=[shutil.which("bash") or "bash"],
                 cwd=root,
                 prompt=f"printf delivered > {marker}",
                 startup_seconds=1,

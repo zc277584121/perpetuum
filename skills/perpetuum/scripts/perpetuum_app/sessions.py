@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+import re
 import secrets
-import shlex
+import shutil
 import subprocess
 import time
-import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import List, Sequence
+
+
+AGENT_ARGUMENTS = {
+    "codex": ["--no-alt-screen", "--dangerously-bypass-approvals-and-sandbox"],
+    "claude": ["--dangerously-skip-permissions"],
+}
+
+
+def agent_command(kind: str) -> List[str]:
+    if kind not in AGENT_ARGUMENTS:
+        raise RuntimeError(f"不支持的 Agent 类型：{kind}")
+    executable = shutil.which(kind)
+    if not executable:
+        raise RuntimeError(f"找不到 Agent 命令：{kind}")
+    return [executable, *AGENT_ARGUMENTS[kind]]
 
 
 def session_name(role: str) -> str:
@@ -61,14 +77,14 @@ def kill_session(name: str) -> None:
 
 def launch_session(
     role: str,
-    command: str,
+    command: Sequence[str],
     cwd: Path,
     prompt: str,
     startup_seconds: int = 8,
     kind: str = "codex",
 ) -> str:
     name = session_name(role)
-    argv = shlex.split(command)
+    argv = list(command)
     if not argv:
         raise RuntimeError("Agent 启动命令为空")
 

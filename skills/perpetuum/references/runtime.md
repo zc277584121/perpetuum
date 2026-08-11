@@ -27,6 +27,8 @@
 
 `activation.yaml` 和 `project.yaml` 使用 JSON 兼容的 YAML 子集，因此文件既是有效 YAML，也能由无第三方依赖的 Runner 直接读取。不要在其中加入 YAML 专有语法。
 
+`project.yaml` 的 `agent` 只记录 `kind`，值为 `codex` 或 `claude`。项目配置不保存启动命令和宿主机权限参数。
+
 ## 激活配置
 
 全局配置包含时区、检查间隔、日报时间、前端监听地址和各项目时间窗口。默认每 30 分钟检查一次。窗口支持跨午夜；`00:00-24:00` 表示全天。
@@ -56,7 +58,7 @@ perpetuum status
 
 `start` 启动一个轻量本地后台进程，同时运行 Scheduler、HTTP API 和前端。Runner 直接管理 Root 与 Reporter session；其他 session 由各自父 Supervisor 通过 `cc-use` 管理。所有 session 名必须唯一。
 
-当前 cc-use 默认把专用 socket 固定在 `~/.cc-use/tmux/cc-use`。该目录权限为 `0700`，并位于顶层 Agent 已授权的 cc-use 可写范围内，避免不同 sandbox 命令因 `/tmp` mount namespace 不同而看到不一致的直属 session。Runner 自己管理的顶层 tmux session 不受此设置影响。
+Runner 通过当前 `PATH` 解析真实可执行文件，并使用参数数组直接启动，不经过 shell alias 或 function。顶层 Codex 使用 `--no-alt-screen --dangerously-bypass-approvals-and-sandbox`，顶层 Claude Code 使用 `--dangerously-skip-permissions`。这些参数只作用于 Runner 直接管理的 Root 与 Reporter；cc-use 独立管理所有下级 Agent 的命令、专用 tmux socket、锁和生命周期。
 
 调用 `start` 前先检查配置的监听地址。若该地址已经提供 Perpetuum API，直接复用现有服务，不重新启动，也不为了获得新进程而改用其他端口。只有用户明确要求时才执行 `restart`。若端口属于其他服务，报告冲突并停止；不要自动关闭对方或选择备用端口。
 

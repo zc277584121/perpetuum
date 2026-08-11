@@ -32,6 +32,7 @@ description: 为一个或多个项目建立、运行和管理长期 Agent 队伍
 6. 对无法自行决定的业务问题写入 `questions.md`；对环境、权限、进程和基础设施问题写入 `escalations.md`。两者都必须让脱离现场的人能看懂。
 7. 不自动更新 Codex、Claude Code、Skill、插件、模型或认证配置。遇到更新提示时跳过并继续；无法继续时记录管控异常。
 8. 会话是否复用或重建属于 Task Supervisor 的软性调度策略，统一读取 [task-supervisor.md](references/templates/task-supervisor.md)。Runner 脚本只确定性管理 Root 与 Reporter，不替业务 Agent 决定 Executor 或 Validator 的上下文生命周期。
+9. `project.yaml` 只记录 Agent 类型。Runner 统一解析真实可执行文件并启动无人值守的 Root 与 Reporter；不要依赖 shell alias，也不要把宿主机启动参数写进项目配置。
 
 ## 使用脚本
 

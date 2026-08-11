@@ -98,16 +98,24 @@ class Runner:
                     "本次不会启动该项目。请恢复目录或修正 project.yaml 后再验证。",
                 )
                 continue
+            raw_agent = project.get("agent", {})
+            agent = raw_agent if isinstance(raw_agent, dict) else {}
+            kind = str(agent.get("kind", "codex"))
+            if kind not in {"codex", "claude"}:
+                self.write_control_escalation(
+                    project_id,
+                    "Runner 无法识别 Agent 类型",
+                    f"project.yaml 中的 Agent 类型无效：{kind}",
+                    "本次不会启动该项目。请把 Agent 类型修正为 codex 或 claude。",
+                )
+                continue
             payloads.append(
                 {
                     "id": project_id,
                     "name": project.get("name", project_id),
                     "path": str(project_path.resolve()),
                     "harness": str(storage.project_dir(self.home, project_id)),
-                    "agent": project.get(
-                        "agent",
-                        {"kind": "codex", "command": "codex"},
-                    ),
+                    "agent": {"kind": kind},
                 }
             )
         return payloads
@@ -213,12 +221,12 @@ class Runner:
         )
         first_agent = projects[0].get("agent", {})
         kind = str(first_agent.get("kind", "codex"))
-        command = str(first_agent.get("command", kind))
         startup_seconds = int(
             config.get("service", {}).get("agent_startup_seconds", 8)
         )
         prompt = self.build_prompt(role, dispatch_path, receipt_path)
         try:
+            command = sessions.agent_command(kind)
             session = sessions.launch_session(
                 role=role,
                 command=command,

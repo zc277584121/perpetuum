@@ -87,6 +87,70 @@ class RunnerTests(unittest.TestCase):
                 self.assertEqual(template.parent.name, "templates")
                 self.assertTrue(template.is_file())
 
+    def test_project_payload_ignores_legacy_agent_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, project_id = self.make_project(root)
+            project_path = storage.project_dir(home, project_id) / "project.yaml"
+            project = storage.read_json(project_path)
+            project["agent"]["command"] = "codex --unexpected"
+            storage.write_json(project_path, project)
+
+            payloads = Runner(home).project_payloads([project_id])
+
+            self.assertEqual(payloads[0]["agent"], {"kind": "codex"})
+
+    def test_top_level_session_uses_runner_managed_agent_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, project_id = self.make_project(root)
+            runner = Runner(home)
+            command = [
+                "/opt/bin/codex",
+                "--no-alt-screen",
+                "--dangerously-bypass-approvals-and-sandbox",
+            ]
+
+            with mock.patch(
+                "perpetuum_app.runner.sessions.agent_command",
+                return_value=command,
+            ) as build_command, mock.patch(
+                "perpetuum_app.runner.sessions.launch_session",
+                return_value="perpetuum-root-20260811-120000-a1b2c3",
+            ) as launch:
+                active = runner.launch_top_level(
+                    "root",
+                    [project_id],
+                    storage.ensure_home(home),
+                )
+
+            self.assertIsNotNone(active)
+            build_command.assert_called_once_with("codex")
+            self.assertEqual(launch.call_args.kwargs["command"], command)
+
+    def test_missing_agent_binary_becomes_control_escalation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, project_id = self.make_project(root)
+            runner = Runner(home)
+
+            with mock.patch(
+                "perpetuum_app.runner.sessions.agent_command",
+                side_effect=RuntimeError("codex executable not found"),
+            ):
+                active = runner.launch_top_level(
+                    "root",
+                    [project_id],
+                    storage.ensure_home(home),
+                )
+
+            self.assertIsNone(active)
+            escalation = (
+                storage.project_dir(home, project_id) / "escalations.md"
+            ).read_text()
+            self.assertIn("无法启动 root session", escalation)
+            self.assertIn("codex executable not found", escalation)
+
     def test_missing_receipt_creates_control_escalation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

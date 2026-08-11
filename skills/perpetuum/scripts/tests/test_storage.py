@@ -38,6 +38,8 @@ class StorageTests(unittest.TestCase):
             self.assertTrue((harness / "runtime" / "events.log").is_file())
 
             activation = json.loads((home / "activation.yaml").read_text())
+            project_config = json.loads((harness / "project.yaml").read_text())
+            self.assertEqual(project_config["agent"], {"kind": "codex"})
             self.assertEqual(
                 activation["projects"][project_id]["windows"],
                 ["00:00-06:00"],

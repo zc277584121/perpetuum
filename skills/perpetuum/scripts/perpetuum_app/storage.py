@@ -188,10 +188,6 @@ def detect_agent_kind() -> str:
     return "codex"
 
 
-def agent_command(kind: str) -> str:
-    return "claude" if kind == "claude" else "codex"
-
-
 def validate_window(window: str) -> str:
     if "-" not in window:
         raise ValueError("时间窗口必须使用 HH:MM-HH:MM 格式")
@@ -245,7 +241,6 @@ def register_project(
         "path": str(resolved),
         "agent": {
             "kind": selected_agent,
-            "command": agent_command(selected_agent),
         },
         "created_at": (
             existing_project.get("created_at")
