@@ -7,11 +7,14 @@ import json
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 from . import storage
 from .server import global_status, process_alive
@@ -38,8 +41,48 @@ def update_service_config(home: Path, **changes: Any) -> Dict[str, Any]:
     return config
 
 
+def connect_host(host: str) -> str:
+    if host in {"", "0.0.0.0"}:
+        return "127.0.0.1"
+    if host == "::":
+        return "::1"
+    return host
+
+
+def service_url(host: str, port: int) -> str:
+    target = connect_host(host)
+    display = f"[{target}]" if ":" in target and not target.startswith("[") else target
+    return f"http://{display}:{port}"
+
+
+def probe_perpetuum(host: str, port: int) -> Optional[Dict[str, Any]]:
+    request = Request(
+        f"{service_url(host, port)}/api/status",
+        headers={"Accept": "application/json"},
+    )
+    try:
+        with urlopen(request, timeout=0.75) as response:
+            server = response.headers.get("Server", "")
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, URLError, ValueError):
+        return None
+    if not server.startswith("Perpetuum/") or not isinstance(payload, dict):
+        return None
+    if "runner" not in payload or "projects" not in payload:
+        return None
+    return payload
+
+
+def port_in_use(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((connect_host(host), port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
 def start_service(home: Path, host: Optional[str], port: Optional[int]) -> int:
-    storage.ensure_home(home)
+    config = storage.ensure_home(home)
     existing = service_pid(home)
     if existing:
         state = load_state(home)
@@ -47,13 +90,31 @@ def start_service(home: Path, host: Optional[str], port: Optional[int]) -> int:
         print(f"Perpetuum 已在运行，PID {existing}，前端：{url}")
         return 0
 
+    configured_service = config.get("service", {})
+    target_host = host or str(configured_service.get("host", "127.0.0.1"))
+    target_port = port if port is not None else int(configured_service.get("port", 8765))
+    url = service_url(target_host, target_port)
+    running = probe_perpetuum(target_host, target_port)
+    if running is not None:
+        running_home = running.get("home")
+        home_note = f"，运行时：{running_home}" if running_home else ""
+        print(f"配置地址已有 Perpetuum 前端，直接复用：{url}{home_note}")
+        return 0
+    if port_in_use(target_host, target_port):
+        print(
+            f"端口已被其他服务占用：{target_host}:{target_port}。"
+            "不会自动重启该服务或改用其他端口，请先确认冲突。",
+            file=sys.stderr,
+        )
+        return 1
+
     changes: Dict[str, Any] = {
         "stop_requested": False,
         "restart_requested": False,
     }
     if host:
         changes["host"] = host
-    if port:
+    if port is not None:
         changes["port"] = port
     config = update_service_config(home, **changes)
 
@@ -139,7 +200,7 @@ def restart_service(home: Path, host: Optional[str], port: Optional[int]) -> int
     }
     if host:
         changes["host"] = host
-    if port:
+    if port is not None:
         changes["port"] = port
     update_service_config(home, **changes)
     state = load_state(home)

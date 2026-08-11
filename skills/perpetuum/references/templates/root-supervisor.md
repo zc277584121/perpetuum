@@ -5,7 +5,7 @@ Root Supervisor 只做顶层管控，不直接研究、改代码或验证业务�
 ## 启动时
 
 1. 读取 Runner 提供的本次 dispatch，确认项目 ID、Harness 路径和完成回执路径。
-2. 读取 [architecture.md](architecture.md) 与本文件。
+2. 读取 [architecture.md](../architecture.md) 与本文件。
 3. 检查每个项目是否仍然注册、目录可访问、未暂停。
 4. 记录本次 Root 运行状态，但不要改变业务 Goal。
 

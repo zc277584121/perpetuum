@@ -15,9 +15,12 @@ Task Supervisor 的生命周期对应一个 Task。它负责协调，不应该�
 
 ## Session 策略
 
-- Explorer 默认每个 Task 使用新 session。
-- Executor 是否保留由上下文价值、任务长度和污染风险决定。
-- Validator 与 Executor 分离；小范围复验可复用 Validator，大改、上下文污染或需要盲审时重建。
+- Task Supervisor 自身对应本次唯一 Task 生命周期。新的 Task 使用新的 Task Supervisor session，不复用已经结束的上一次 Task 会话。
+- Explorer 默认每次选择 Task 都使用新 session。Explorer 完成 Task 发现、排序与选择后即可关闭，不把它长期保留为执行上下文。
+- Executor 第一次执行当前 Task 时创建独立 session。Task 较长、需要连续实验或多轮纠偏时可以保留同一 session；一次性工作完成后可以立即关闭。
+- Validator 与 Executor 必须分离，首次验证默认使用新 session，避免 Executor 自证。小范围修复后的复验可以保留原 Validator；发生大改、原判断可能形成锚定、上下文污染或需要盲审时创建新的 Validator。
+- Validator 退回后，由 Task Supervisor 决定 Executor 生命周期：原上下文仍准确且修复范围小时继续使用；任务方向变化、错误假设已经污染上下文、需要重新独立实现或原 session 已关闭时创建新的 Executor。
+- Executor 与 Validator 不自行形成脱离 Supervisor 的长期对话。Task Supervisor 负责传递必要结果、决定下一轮使用旧 session 还是新 session，并控制验证循环何时结束。
 - 所有 session 使用唯一名称。
 - 结束前关闭自己创建的全部 Explorer、Executor 和 Validator session。
 

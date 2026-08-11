@@ -62,6 +62,31 @@ class RunnerTests(unittest.TestCase):
             self.assertFalse(run_dir.exists())
             kill.assert_called_once_with("perpetuum-root-20260805-120000-a1b2c3")
 
+    def test_dispatch_uses_role_templates_subdirectory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, project_id = self.make_project(root)
+            runner = Runner(home)
+            payloads = runner.project_payloads([project_id])
+            _run_dir, dispatch_path, _receipt, _run_id = runner.create_dispatch(
+                "root",
+                payloads,
+            )
+
+            dispatch = storage.read_json(dispatch_path)
+            for key in (
+                "root_supervisor",
+                "project_supervisor",
+                "task_supervisor",
+                "explorer",
+                "executor",
+                "validator",
+                "reporter",
+            ):
+                template = Path(dispatch["references"][key])
+                self.assertEqual(template.parent.name, "templates")
+                self.assertTrue(template.is_file())
+
     def test_missing_receipt_creates_control_escalation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

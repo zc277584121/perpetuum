@@ -125,21 +125,16 @@ class Runner:
         run_dir.mkdir(parents=True, exist_ok=False)
         dispatch_path = run_dir / "dispatch.json"
         receipt_path = run_dir / "receipt.json"
+        templates_dir = self.skill_root / "references" / "templates"
         references = {
             "architecture": str(self.skill_root / "references" / "architecture.md"),
-            "root_supervisor": str(
-                self.skill_root / "references" / "root-supervisor.md"
-            ),
-            "project_supervisor": str(
-                self.skill_root / "references" / "project-supervisor.md"
-            ),
-            "task_supervisor": str(
-                self.skill_root / "references" / "task-supervisor.md"
-            ),
-            "explorer": str(self.skill_root / "references" / "explorer.md"),
-            "executor": str(self.skill_root / "references" / "executor.md"),
-            "validator": str(self.skill_root / "references" / "validator.md"),
-            "reporter": str(self.skill_root / "references" / "reporter.md"),
+            "root_supervisor": str(templates_dir / "root-supervisor.md"),
+            "project_supervisor": str(templates_dir / "project-supervisor.md"),
+            "task_supervisor": str(templates_dir / "task-supervisor.md"),
+            "explorer": str(templates_dir / "explorer.md"),
+            "executor": str(templates_dir / "executor.md"),
+            "validator": str(templates_dir / "validator.md"),
+            "reporter": str(templates_dir / "reporter.md"),
             "human_communication": str(
                 self.skill_root / "references" / "human-communication.md"
             ),
@@ -167,14 +162,21 @@ class Runner:
     ) -> str:
         if role == "root":
             role_name = "Root Supervisor"
-            primary_reference = self.skill_root / "references" / "root-supervisor.md"
+            primary_reference = (
+                self.skill_root
+                / "references"
+                / "templates"
+                / "root-supervisor.md"
+            )
             task = (
                 "按照 dispatch 中的项目列表，从 Root 向下调用 Project Supervisor，"
                 "让每个项目至多推进一个 Task，并汇总所有项目结果。"
             )
         else:
             role_name = "Reporter"
-            primary_reference = self.skill_root / "references" / "reporter.md"
+            primary_reference = (
+                self.skill_root / "references" / "templates" / "reporter.md"
+            )
             task = "独立检查所有已注册项目和 Runner 健康，并分别写入今天的项目日报。"
 
         return f"""你现在是 Perpetuum 的 {role_name}。

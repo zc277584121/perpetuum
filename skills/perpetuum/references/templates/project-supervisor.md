@@ -19,6 +19,8 @@ Project Supervisor 管理一个项目的业务入口和管控状态，不直接�
 - 传入当前激活原因、时间资格和已处理的人类指令；
 - 要求结束前关闭 Explorer、Executor、Validator session。
 
+每个新的 Task 生命周期都创建新的 Task Supervisor session，不复用已经结束的上一个 Task Supervisor。Task 内部的 Executor 和 Validator 是否复用，由 Task Supervisor 根据 [task-supervisor.md](task-supervisor.md) 决定。
+
 Task Supervisor 每次只完成一个 Task。Project Supervisor 收到结果后更新项目状态，并确保 Questions 或 Escalations 的表述对人类完整可读。
 
 ## Idle 与阻塞

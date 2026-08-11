@@ -56,6 +56,8 @@ perpetuum status
 
 `start` 启动一个轻量本地后台进程，同时运行 Scheduler、HTTP API 和前端。Runner 直接管理 Root 与 Reporter session；其他 session 由各自父 Supervisor 通过 `cc-use` 管理。所有 session 名必须唯一。
 
+调用 `start` 前先检查配置的监听地址。若该地址已经提供 Perpetuum API，直接复用现有服务，不重新启动，也不为了获得新进程而改用其他端口。只有用户明确要求时才执行 `restart`。若端口属于其他服务，报告冲突并停止；不要自动关闭对方或选择备用端口。
+
 Runner 不通过 TUI 屏幕文本判断完成。它为 Root 和 Reporter 提供一次性回执路径，Agent 原子写入回执后，Runner 才回收顶层 session。TUI 屏幕只用于人类观察和软性诊断。
 
 ## 前端
