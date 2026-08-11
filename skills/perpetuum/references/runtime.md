@@ -60,7 +60,7 @@ perpetuum status
 
 Runner 通过当前 `PATH` 解析真实可执行文件，并使用参数数组直接启动，不经过 shell alias 或 function。顶层 Codex 使用无人值守的 `workspace-write` 沙箱，只额外开放 Perpetuum Harness 与 cc-use 状态目录；不会因为长期运行而获得宿主机级无沙箱权限。顶层 Claude Code 使用 `--dangerously-skip-permissions`，因此只应在已有外部隔离和可信项目中使用。这些参数只作用于 Runner 直接管理的 Root 与 Reporter；cc-use 独立管理所有下级 Agent 的命令、专用 tmux socket、锁和生命周期。
 
-调用 `start` 前先检查配置的监听地址。若该地址已经提供 Perpetuum API，直接复用现有服务，不重新启动，也不为了获得新进程而改用其他端口。只有用户明确要求时才执行 `restart`。若端口属于其他服务，报告冲突并停止；不要自动关闭对方或选择备用端口。
+调用 `start` 前先检查配置的监听地址。若该地址已经提供 Perpetuum API，并且 API 报告的运行时目录与本次 `home` 相同，直接复用现有服务。若属于不同运行时目录，报告冲突并停止；不要假装复用、自动关闭对方或选择备用端口。只有用户明确要求时才执行 `restart`。
 
 Runner 不通过 TUI 屏幕文本判断完成。它为 Root 和 Reporter 提供一次性回执路径，Agent 原子写入回执后，Runner 才回收顶层 session。TUI 屏幕只用于人类观察和软性诊断。
 

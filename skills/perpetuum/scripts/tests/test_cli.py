@@ -63,6 +63,32 @@ class CliTests(unittest.TestCase):
                 server.server_close()
                 thread.join(timeout=5)
 
+    def test_start_rejects_perpetuum_frontend_for_different_home(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            running_home = root / "running-home"
+            requested_home = root / "requested-home"
+            storage.ensure_home(running_home)
+            server = RuntimeServer(running_home, "127.0.0.1", 0)
+            port = server.server.server_address[1]
+            server.start()
+            try:
+                error = io.StringIO()
+                with mock.patch("perpetuum_app.cli.subprocess.Popen") as popen:
+                    with redirect_stderr(error):
+                        result = cli.start_service(
+                            requested_home,
+                            "127.0.0.1",
+                            port,
+                        )
+                self.assertEqual(result, 1)
+                self.assertIn("不同运行时", error.getvalue())
+                self.assertIn(str(running_home), error.getvalue())
+                self.assertIn(str(requested_home), error.getvalue())
+                popen.assert_not_called()
+            finally:
+                server.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

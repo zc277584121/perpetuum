@@ -97,9 +97,25 @@ def start_service(home: Path, host: Optional[str], port: Optional[int]) -> int:
     running = probe_perpetuum(target_host, target_port)
     if running is not None:
         running_home = running.get("home")
-        home_note = f"，运行时：{running_home}" if running_home else ""
-        print(f"配置地址已有 Perpetuum 前端，直接复用：{url}{home_note}")
-        return 0
+        try:
+            running_home_path = (
+                Path(str(running_home)).expanduser().resolve()
+                if running_home
+                else None
+            )
+        except (OSError, RuntimeError):
+            running_home_path = None
+        requested_home = home.resolve()
+        if running_home_path == requested_home:
+            print(f"配置地址已有 Perpetuum 前端，直接复用：{url}")
+            return 0
+        print(
+            f"配置地址已有不同运行时的 Perpetuum：{url}。"
+            f"当前请求：{requested_home}；已有运行时：{running_home or '无法确认'}。"
+            "不会复用该服务或改用其他端口。",
+            file=sys.stderr,
+        )
+        return 1
     if port_in_use(target_host, target_port):
         print(
             f"端口已被其他服务占用：{target_host}:{target_port}。"
