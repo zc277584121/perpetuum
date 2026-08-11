@@ -1,57 +1,59 @@
 ---
 name: perpetuum
-description: 为一个或多个项目建立、运行和管理长期 Agent 队伍。适用于用户希望让 Agent 在每天的时间窗口内持续研究、实现和验证长期目标，或希望查看、暂停、恢复、调整、汇报现有 Perpetuum 项目时；也适用于搭建 Root → Project → Task Supervisor 层级、Explorer → Executor → Validator 循环、本地监控前端和文件化人类介入机制。
+description: 为一个或多个项目建立、运行和管理长期 Agent 队伍。适用于初始化长期自主工作、按时间窗口持续探索和执行 Task、查看或调整运行状态、处理人类输入，以及生成项目日报。
 ---
 
 # Perpetuum
 
-把长期工作组织成由本地 Runner 定时唤醒的 Supervisor 树。所有 Agent 上下级调用通过 `cc-use` 完成；不要复制或硬编码 `cc-use` 的命令和参数。
+Perpetuum 把一个或多个真实项目目录组织成可长期运行的 Agent 队伍。本地 Runner 周期性唤醒具备启动条件的项目，Supervisor 再通过 `cc-use` 逐层调用下级 Agent；长期目标、Task 计划、人类输入、运行状态和日报都保存在项目自己的 Harness 中。
 
 ## 依赖
 
-- **必须依赖 `cc-use`**：Root、Project、Task Supervisor 以及 Explorer、Executor、Validator 的上下级调用都依赖它。当前 Agent 无法加载 `cc-use` 时，不要建立或启动 Perpetuum Harness；先说明缺失并让用户安装或修复。
-- **可选依赖 MemSearch**：初始化时若可用，用它召回项目历史并减少用户重复说明；不可用时直接检查项目文件并通过对话补齐信息，不影响 Perpetuum 的核心运行。
+- **必须依赖 [cc-use](https://github.com/zc277584121/cc-use)**：负责所有 Agent 上下级之间的交互式 TUI session 创建、观察、继续对话和关闭。当前 Agent 无法加载 `cc-use` 时，不要建立或启动 Harness；先让用户按 cc-use 仓库的说明安装或修复。Perpetuum 只描述调用意图，不复制 cc-use 的具体命令和参数。
+- **可选依赖 [MemSearch](https://github.com/zilliztech/memsearch)**：初始化时用于召回项目历史，减少用户重复说明。不可用时直接检查项目文件并通过对话补齐信息，不影响核心运行。
 
-## 先按意图读取参考
+## 核心名词
 
-| 用户意图 | 必读参考 |
+- **Project**：一个需要长期推进的真实项目目录。
+- **Harness**：Perpetuum 为 Project 保存的长期目标、计划、人类输入、报告和运行状态，默认位于 `~/.perpetuum/projects/<project-id>/`；它不是项目源码的副本。
+- **Runner**：非 Agent 的本地后台服务，负责读取时间窗口、启动顶层 Agent、维护状态并提供前端，不做业务判断。
+- **Supervisor**：只负责调度和管控的 Agent。调用链为 Root Supervisor → Project Supervisor → Task Supervisor。
+- **Task**：唯一的业务工作粒度。每个 Task 由 Explorer 选择、Executor 执行、Validator 独立验证。
+- **Reporter**：与 Root 工作链路独立的日报 Agent；即使业务链路异常，也会检查并报告运行情况。
+- **session**：一个由 tmux 承载的交互式 Agent TUI 会话。每个父节点只管理自己创建的直属 session。
+
+完整的层级、职责和调用方向见 [architecture.md](references/architecture.md)。
+
+## 按当前任务读取参考
+
+| 当前任务 | 必读参考 |
 |---|---|
-| 初始化或注册项目 | [setup.md](references/setup.md)、[architecture.md](references/architecture.md)、[runtime.md](references/runtime.md) |
-| 启动、停止、查看或调整运行 | [runtime.md](references/runtime.md) |
-| 调整 Supervisor 行为 | `references/templates/` 中对应的角色模板 |
-| 处理人类指令、问题或管控异常 | [human-communication.md](references/human-communication.md) |
+| 理解整体结构或职责边界 | [architecture.md](references/architecture.md) |
+| 初始化或注册项目 | [setup.md](references/setup.md)，再读 [architecture.md](references/architecture.md) 和 [runtime.md](references/runtime.md) |
+| 启动、停止、查看、暂停、恢复或调整时间窗口 | [runtime.md](references/runtime.md) |
+| 处理人类指令、业务问题、管控异常或日报 | [human-communication.md](references/human-communication.md) |
+| 调整 Root Supervisor | [root-supervisor.md](references/templates/root-supervisor.md) |
+| 调整 Project Supervisor | [project-supervisor.md](references/templates/project-supervisor.md) |
+| 调整 Task 调度或 session 复用策略 | [task-supervisor.md](references/templates/task-supervisor.md) |
+| 调整 Task 的发现、执行或验证 | [explorer.md](references/templates/explorer.md)、[executor.md](references/templates/executor.md)、[validator.md](references/templates/validator.md) |
 | 生成或检查日报 | [reporter.md](references/templates/reporter.md) |
 
-## 工作原则
+只读取与当前任务相关的参考；不要把全部参考文档无差别加载进上下文。
 
-1. 把一个实际目录视为一个 Project。
-2. 用 `goal.md` 保存长期业务契约；用 `plan.md` 保存 Explorer 维护的 Task 列表。
-3. 只在 Task 层运行 Explorer → Executor → Validator。Root 和 Project 层只做管控。
-4. 同一 Project 同时最多运行一个 Task；不要设置跨 Project 的全局并发上限。
-5. 时间窗口只决定是否可以开始新 Task。已经开始的 Task 允许继续完成。
-6. 对无法自行决定的业务问题写入 `questions.md`；对环境、权限、进程和基础设施问题写入 `escalations.md`。两者都必须让脱离现场的人能看懂。
-7. 不自动更新 Codex、Claude Code、Skill、插件、模型或认证配置。遇到更新提示时跳过并继续；无法继续时记录管控异常。
-8. 会话是否复用或重建属于 Task Supervisor 的软性调度策略，统一读取 [task-supervisor.md](references/templates/task-supervisor.md)。Runner 脚本只确定性管理 Root 与 Reporter，不替业务 Agent 决定 Executor 或 Validator 的上下文生命周期。
-9. `project.yaml` 只记录 Agent 类型。Runner 统一解析真实可执行文件并启动无人值守的 Root 与 Reporter；不要依赖 shell alias，也不要把宿主机启动参数写进项目配置。
+## 核心规则
 
-## 使用脚本
+1. 初始化时先检查项目和可用历史，在对话中形成完整契约。信息不足、相互矛盾或会改变长期行为时，继续向用户确认；只有用户明确确认最终内容后才能建立 Harness。
+2. `goal.md` 是长期业务契约；`plan.md` 是 Explorer 维护的 Task 列表；`history.md` 只保存已经验证的业务结论和重要决定。
+3. Root 和 Project 层只做管控。Explorer → Executor → Validator 循环只发生在 Task 层。
+4. 同一 Project 同时最多运行一个 Task；不同 Project 可以并行，不设置跨项目的全局 Task 数上限。
+5. 时间窗口只决定能否开始新 Task。已经开始的 Task 可以跨出时间窗口继续完成。
+6. 需要人类做业务选择时写入 `questions.md`；环境、权限、认证、进程、配额、磁盘、网络或基础设施问题写入 `escalations.md`。两者都必须写清背景、影响、证据、建议和人类需要做的最小决定。
+7. 无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。遇到更新提示时跳过并继续；因此无法继续时记录管控异常。
+8. Explorer 默认使用全新 session，Validator 与 Executor 保持独立；Executor 和 Validator 是否在后续轮次复用，由 Task Supervisor 根据任务上下文决定。详细策略只在 [task-supervisor.md](references/templates/task-supervisor.md) 维护。
+9. `project.yaml` 只记录 Agent 类型。Runner 通过 `PATH` 解析真实可执行文件并管理 Root 与 Reporter 的启动参数；下级 Agent 的运行细节由 cc-use 管理，不依赖 shell alias，也不写入项目配置。
 
-只使用本 Skill 的单一入口 `scripts/perpetuum` 管理 Runner、项目注册和本地前端。先用绝对路径调用；若用户自行放入 `PATH`，再使用简写 `perpetuum`。
+## 脚本入口
 
-初始化时若 MemSearch 可用，优先用它回忆项目历史，再检查项目文件并起草 Harness；若不可用则跳过。MemSearch 结果只是线索；只有经过用户完整确认后才能注册项目并建立 Harness，确认后的 Harness 文件才是事实来源。
+所有运行时操作只使用本 Skill 的 `scripts/perpetuum`。默认用 Skill 安装目录下的绝对路径调用；只有用户明确把它加入 `PATH` 后，才使用 `perpetuum` 简写。
 
-## 指导文档
-
-- [architecture.md](references/architecture.md)：层级、职责和调用方向
-- [human-communication.md](references/human-communication.md)：Inbox、Questions、Escalations 与人类回复
-- [runtime.md](references/runtime.md)：目录、状态、调度、前端和进程生命周期
-
-## 角色模板
-
-- [root-supervisor.md](references/templates/root-supervisor.md)：Root Supervisor
-- [project-supervisor.md](references/templates/project-supervisor.md)：Project Supervisor
-- [task-supervisor.md](references/templates/task-supervisor.md)：Task Supervisor、角色会话复用与重建策略
-- [explorer.md](references/templates/explorer.md)：Task 发现与排序
-- [executor.md](references/templates/executor.md)：Task 执行
-- [validator.md](references/templates/validator.md)：独立验证
-- [reporter.md](references/templates/reporter.md)：逐项目日报
+初始化必须遵循 [setup.md](references/setup.md) 的确认流程。查看命令、运行目录、状态、调度和前端行为时读取 [runtime.md](references/runtime.md)。

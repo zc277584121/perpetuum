@@ -192,13 +192,13 @@ class Runner:
 先完整读取：
 1. dispatch：{dispatch_path}
 2. 角色规范：{primary_reference}
-3. dispatch 中列出的其他必要 References
+3. dispatch 中列出的其他必要参考文档
 
 本次任务：{task}
 
 严格遵守：
 - 所有 Agent 上下级调用使用当前安装的 cc-use Skill，并使用唯一 session；不要在这里硬编码或猜测 cc-use 命令。
-- 不自动更新 Codex、Claude Code、Skill、插件、模型或认证配置；遇到更新提示时跳过。
+- 无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置；遇到更新提示时跳过。
 - 不使用非交互式 Agent 模式代替 TUI。
 - 无论成功、Idle、部分失败还是无法继续，都要先对你创建的每个直属子 session 调用 cc-use finish，确认退出并复核无遗留 session。
 - 只有直属子 session 全部结束、相关报告已同步最终状态后，才能把一个 JSON 对象原子写入 {receipt_path}。至少包含 status、summary、projects、finished_at；先写同目录临时文件，再 rename。

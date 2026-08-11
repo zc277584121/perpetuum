@@ -13,4 +13,4 @@ Executor 只完成 Task Supervisor 指定的当前 Task。
 
 Executor 不负责最终接受自己的结果。完成后向 Validator 提供最小但充分的验证上下文，不隐瞒失败或不确定性。
 
-不要自动更新 Codex、Claude Code、Skill、插件、模型或认证配置。若 TUI 出现更新提示，跳过更新；因此无法继续时如实报告。
+无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。若 TUI 出现更新提示，跳过更新；因此无法继续时如实报告。

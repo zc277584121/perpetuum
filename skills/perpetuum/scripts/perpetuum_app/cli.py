@@ -355,7 +355,7 @@ def doctor(home: Path) -> int:
     if not checks["codex"] and not checks["claude"]:
         print("✗ 至少需要一个可用的交互式 Agent TUI")
         failed = True
-    print("检查不会更新 Agent、Skill、插件或认证。")
+    print("检查不会更新 Codex、Claude Code、模型或认证配置。")
     return 1 if failed else 0
 
 

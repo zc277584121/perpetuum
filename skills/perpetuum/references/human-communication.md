@@ -2,6 +2,15 @@
 
 所有通信文件都放在各自项目 Harness 中。前端只聚合，不在全局复制 Inbox、Questions、Escalations 或 Reports。
 
+业务面描述项目要做什么以及需要怎样取舍；管控面描述系统为什么不能正常工作。各文件的用途和人类权限如下：
+
+| 文件 | 所属面 | 谁写入 | 人类通常怎样使用 |
+|---|---|---|---|
+| `inbox.md` | 业务面 | 人类追加，Project Supervisor 吸收 | 写入目标修正、优先级、资源和边界 |
+| `questions.md` | 业务面 | Project Supervisor 提问，人类追加回复 | 决定 Agent 无权自行选择的业务问题 |
+| `escalations.md` | 管控面 | Supervisor 或 Runner 记录，人类追加回复 | 处理环境、权限、认证、进程和基础设施阻塞 |
+| `reports/*.md` | 汇报 | Reporter 写入 | 阅读进展、待办决定和运行健康，不直接编辑 |
+
 ## Inbox：人类业务指令
 
 人类可随时在文件末尾的追加区写入目标修正、优先级、暂停某类工作、资源说明或新的边界。Project Supervisor 处理后保留原文，并补充处理时间、采取的动作和影响范围。
@@ -34,7 +43,7 @@ Escalation 用于环境、权限、配额、认证、进程、session、磁盘�
 - 处理后怎样验证恢复；
 - 原始日志与状态文件路径。
 
-不要用自动更新 Agent、Skill、插件或认证来“修复” Escalation。
+不要把自动更新 Codex、Claude Code、模型或认证配置当作默认恢复动作。
 
 ## 人类回复
 

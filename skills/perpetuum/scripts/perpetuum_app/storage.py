@@ -304,7 +304,7 @@ def project_templates(name: str, path: Path) -> Dict[str, str]:
             "## 可用资源\n\n"
             "- 请补充机器、数据、服务、工具和权限。\n\n"
             "## 边界与底线\n\n"
-            "- 不自动更新 Agent、Skill、插件或认证配置。\n"
+            "- 不自动更新 Codex、Claude Code、模型或认证配置。\n"
             "- 请补充成本、安全、合规和业务边界。\n\n"
             "## 进展证据\n\n"
             "- 请说明哪些测试、实验、产物或指标可以证明真实进展。\n"
