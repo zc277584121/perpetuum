@@ -12,26 +12,19 @@ from pathlib import Path
 from typing import List, Sequence
 
 
-def agent_command(kind: str, harness_home: Path) -> List[str]:
-    if kind not in {"codex", "claude"}:
+AGENT_ARGUMENTS = {
+    "codex": ["--no-alt-screen", "--dangerously-bypass-approvals-and-sandbox"],
+    "claude": ["--dangerously-skip-permissions"],
+}
+
+
+def agent_command(kind: str) -> List[str]:
+    if kind not in AGENT_ARGUMENTS:
         raise RuntimeError(f"不支持的 Agent 类型：{kind}")
     executable = shutil.which(kind)
     if not executable:
         raise RuntimeError(f"找不到 Agent 命令：{kind}")
-    if kind == "codex":
-        return [
-            executable,
-            "--no-alt-screen",
-            "--sandbox",
-            "workspace-write",
-            "--ask-for-approval",
-            "never",
-            "--add-dir",
-            str(harness_home.resolve()),
-            "--add-dir",
-            str((Path.home() / ".cc-use").resolve()),
-        ]
-    return [executable, "--dangerously-skip-permissions"]
+    return [executable, *AGENT_ARGUMENTS[kind]]
 
 
 def session_name(role: str) -> str:

@@ -108,14 +108,7 @@ class RunnerTests(unittest.TestCase):
             command = [
                 "/opt/bin/codex",
                 "--no-alt-screen",
-                "--sandbox",
-                "workspace-write",
-                "--ask-for-approval",
-                "never",
-                "--add-dir",
-                str(home.resolve()),
-                "--add-dir",
-                str((Path.home() / ".cc-use").resolve()),
+                "--dangerously-bypass-approvals-and-sandbox",
             ]
 
             with mock.patch(
@@ -132,7 +125,7 @@ class RunnerTests(unittest.TestCase):
                 )
 
             self.assertIsNotNone(active)
-            build_command.assert_called_once_with("codex", home)
+            build_command.assert_called_once_with("codex")
             self.assertEqual(launch.call_args.kwargs["command"], command)
 
     def test_top_level_prompt_requires_child_cleanup_before_receipt(self):
