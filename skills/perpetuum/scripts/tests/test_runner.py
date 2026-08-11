@@ -108,7 +108,14 @@ class RunnerTests(unittest.TestCase):
             command = [
                 "/opt/bin/codex",
                 "--no-alt-screen",
-                "--dangerously-bypass-approvals-and-sandbox",
+                "--sandbox",
+                "workspace-write",
+                "--ask-for-approval",
+                "never",
+                "--add-dir",
+                str(home.resolve()),
+                "--add-dir",
+                str((Path.home() / ".cc-use").resolve()),
             ]
 
             with mock.patch(
@@ -125,7 +132,7 @@ class RunnerTests(unittest.TestCase):
                 )
 
             self.assertIsNotNone(active)
-            build_command.assert_called_once_with("codex")
+            build_command.assert_called_once_with("codex", home)
             self.assertEqual(launch.call_args.kwargs["command"], command)
 
     def test_missing_agent_binary_becomes_control_escalation(self):

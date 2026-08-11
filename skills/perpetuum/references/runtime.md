@@ -58,7 +58,7 @@ perpetuum status
 
 `start` 启动一个轻量本地后台进程，同时运行 Scheduler、HTTP API 和前端。Runner 直接管理 Root 与 Reporter session；其他 session 由各自父 Supervisor 通过 `cc-use` 管理。所有 session 名必须唯一。
 
-Runner 通过当前 `PATH` 解析真实可执行文件，并使用参数数组直接启动，不经过 shell alias 或 function。顶层 Codex 使用 `--no-alt-screen --dangerously-bypass-approvals-and-sandbox`，顶层 Claude Code 使用 `--dangerously-skip-permissions`。这些参数只作用于 Runner 直接管理的 Root 与 Reporter；cc-use 独立管理所有下级 Agent 的命令、专用 tmux socket、锁和生命周期。
+Runner 通过当前 `PATH` 解析真实可执行文件，并使用参数数组直接启动，不经过 shell alias 或 function。顶层 Codex 使用无人值守的 `workspace-write` 沙箱，只额外开放 Perpetuum Harness 与 cc-use 状态目录；不会因为长期运行而获得宿主机级无沙箱权限。顶层 Claude Code 使用 `--dangerously-skip-permissions`，因此只应在已有外部隔离和可信项目中使用。这些参数只作用于 Runner 直接管理的 Root 与 Reporter；cc-use 独立管理所有下级 Agent 的命令、专用 tmux socket、锁和生命周期。
 
 调用 `start` 前先检查配置的监听地址。若该地址已经提供 Perpetuum API，直接复用现有服务，不重新启动，也不为了获得新进程而改用其他端口。只有用户明确要求时才执行 `restart`。若端口属于其他服务，报告冲突并停止；不要自动关闭对方或选择备用端口。
 

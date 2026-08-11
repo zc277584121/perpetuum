@@ -15,20 +15,30 @@ class SessionTests(unittest.TestCase):
             "codex": "/opt/bin/codex",
             "claude": "/opt/bin/claude",
         }
-        with mock.patch(
-            "perpetuum_app.sessions.shutil.which",
-            side_effect=binaries.get,
+        with tempfile.TemporaryDirectory() as directory, mock.patch(
+            "perpetuum_app.sessions.shutil.which", side_effect=binaries.get
+        ), mock.patch(
+            "perpetuum_app.sessions.Path.home",
+            return_value=Path("/home/tester"),
         ):
+            harness_home = Path(directory) / "perpetuum-home"
             self.assertEqual(
-                sessions.agent_command("codex"),
+                sessions.agent_command("codex", harness_home),
                 [
                     "/opt/bin/codex",
                     "--no-alt-screen",
-                    "--dangerously-bypass-approvals-and-sandbox",
+                    "--sandbox",
+                    "workspace-write",
+                    "--ask-for-approval",
+                    "never",
+                    "--add-dir",
+                    str(harness_home.resolve()),
+                    "--add-dir",
+                    "/home/tester/.cc-use",
                 ],
             )
             self.assertEqual(
-                sessions.agent_command("claude"),
+                sessions.agent_command("claude", harness_home),
                 ["/opt/bin/claude", "--dangerously-skip-permissions"],
             )
 

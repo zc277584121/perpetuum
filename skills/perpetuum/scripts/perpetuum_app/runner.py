@@ -226,7 +226,7 @@ class Runner:
         )
         prompt = self.build_prompt(role, dispatch_path, receipt_path)
         try:
-            command = sessions.agent_command(kind)
+            command = sessions.agent_command(kind, self.home)
             session = sessions.launch_session(
                 role=role,
                 command=command,
