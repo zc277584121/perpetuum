@@ -17,20 +17,15 @@ class SessionTests(unittest.TestCase):
                 role="smoke",
                 command="bash",
                 cwd=root,
-                prompt=f'printf "%s" "$TMUX_TMPDIR" > {marker}',
+                prompt=f"printf delivered > {marker}",
                 startup_seconds=1,
                 kind="claude",
-                tmux_tmpdir=root / "cc-use-tmux",
             )
             try:
                 deadline = time.time() + 5
                 while time.time() < deadline and not marker.exists():
                     time.sleep(0.1)
-                self.assertEqual(marker.read_text(), str(root / "cc-use-tmux"))
-                self.assertEqual(
-                    (root / "cc-use-tmux").stat().st_mode & 0o777,
-                    0o700,
-                )
+                self.assertEqual(marker.read_text(), "delivered")
                 self.assertTrue(session.startswith("perpetuum-smoke-"))
             finally:
                 sessions.kill_session(session)

@@ -9,7 +9,6 @@ import time
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 
 def session_name(role: str) -> str:
@@ -60,13 +59,6 @@ def kill_session(name: str) -> None:
     )
 
 
-def cc_use_tmux_tmpdir(path: Optional[Path] = None) -> Path:
-    resolved = path or (Path.home() / ".cc-use" / "tmux")
-    resolved.mkdir(mode=0o700, parents=True, exist_ok=True)
-    resolved.chmod(0o700)
-    return resolved
-
-
 def launch_session(
     role: str,
     command: str,
@@ -74,13 +66,11 @@ def launch_session(
     prompt: str,
     startup_seconds: int = 8,
     kind: str = "codex",
-    tmux_tmpdir: Optional[Path] = None,
 ) -> str:
     name = session_name(role)
     argv = shlex.split(command)
     if not argv:
         raise RuntimeError("Agent 启动命令为空")
-    inner_tmux_tmpdir = cc_use_tmux_tmpdir(tmux_tmpdir)
 
     result = subprocess.run(
         [
@@ -95,8 +85,6 @@ def launch_session(
             "60",
             "-c",
             str(cwd),
-            "env",
-            f"TMUX_TMPDIR={inner_tmux_tmpdir}",
             *argv,
         ],
         stdout=subprocess.PIPE,
