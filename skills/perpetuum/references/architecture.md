@@ -31,7 +31,11 @@ Runner 直接启动 Root 与 Reporter 这两个彼此独立的顶层 TUI。Root 
 
 ## 调用规则
 
-所有 Agent 上下级调用都使用当前安装的 `cc-use` Skill，并将子节点的项目目录、Harness 路径、职责参考和完成条件用自然语言传入。Perpetuum 不保存或复制 `cc-use` 的具体命令和参数。
+所有 Agent 上下级调用都使用当前安装的 `cc-use` Skill。Perpetuum 只用自然语言说明要创建、观察或关闭哪一个下级 session，不保存或复制 `cc-use` 的具体命令和参数。
+
+每个角色读取自己的 Playbook。Playbook 是软性工作指南，不是需要逐字复制的固定 Prompt。父 Supervisor 应结合 Playbook、当前 Harness、运行时状态和现场判断，向下级说明本次为什么开始、要读取什么、边界在哪里、期望返回什么以及何时停止。
+
+Runner 对每个新建的 Root 或 Reporter session 只发送一次启动 Prompt。其他 Prompt 由父 Supervisor 在新建下级 session、收到实际结果、Validator 退回、人类补充决定或外部条件发生实质变化时发送。时间经过、session 仍存活或屏幕暂时没有变化，本身都不是发送新 Prompt 的理由。
 
 `project.yaml` 只保存 `codex` 或 `claude` 类型，不保存启动命令。Codex、Claude Code 的顶层启动参数由 Runner 统一管理；cc-use 管理下级 Agent 的启动参数和运行资源。
 

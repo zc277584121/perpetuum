@@ -133,16 +133,16 @@ class Runner:
         run_dir.mkdir(parents=True, exist_ok=False)
         dispatch_path = run_dir / "dispatch.json"
         receipt_path = run_dir / "receipt.json"
-        templates_dir = self.skill_root / "references" / "templates"
+        playbooks_dir = self.skill_root / "references" / "playbooks"
         references = {
             "architecture": str(self.skill_root / "references" / "architecture.md"),
-            "root_supervisor": str(templates_dir / "root-supervisor.md"),
-            "project_supervisor": str(templates_dir / "project-supervisor.md"),
-            "task_supervisor": str(templates_dir / "task-supervisor.md"),
-            "explorer": str(templates_dir / "explorer.md"),
-            "executor": str(templates_dir / "executor.md"),
-            "validator": str(templates_dir / "validator.md"),
-            "reporter": str(templates_dir / "reporter.md"),
+            "root_supervisor": str(playbooks_dir / "root-supervisor.md"),
+            "project_supervisor": str(playbooks_dir / "project-supervisor.md"),
+            "task_supervisor": str(playbooks_dir / "task-supervisor.md"),
+            "explorer": str(playbooks_dir / "explorer.md"),
+            "executor": str(playbooks_dir / "executor.md"),
+            "validator": str(playbooks_dir / "validator.md"),
+            "reporter": str(playbooks_dir / "reporter.md"),
             "human_communication": str(
                 self.skill_root / "references" / "human-communication.md"
             ),
@@ -170,39 +170,33 @@ class Runner:
     ) -> str:
         if role == "root":
             role_name = "Root Supervisor"
-            primary_reference = (
+            playbook_path = (
                 self.skill_root
                 / "references"
-                / "templates"
+                / "playbooks"
                 / "root-supervisor.md"
-            )
-            task = (
-                "按照 dispatch 中的项目列表，从 Root 向下调用 Project Supervisor，"
-                "让每个项目至多推进一个 Task，并汇总所有项目结果。"
             )
         else:
             role_name = "Reporter"
-            primary_reference = (
-                self.skill_root / "references" / "templates" / "reporter.md"
+            playbook_path = (
+                self.skill_root / "references" / "playbooks" / "reporter.md"
             )
-            task = "独立检查所有已注册项目和 Runner 健康，并分别写入今天的项目日报。"
 
-        return f"""你现在是 Perpetuum 的 {role_name}。
+        return f"""你是本次 Perpetuum 激活的 {role_name}。
 
-先完整读取：
-1. dispatch：{dispatch_path}
-2. 角色规范：{primary_reference}
-3. dispatch 中列出的其他必要参考文档
+本次 dispatch：{dispatch_path}
+角色 Playbook：{playbook_path}
+完成回执：{receipt_path}
 
-本次任务：{task}
+这是一次新的独立激活。先完整读取 dispatch、角色 Playbook 和其中要求的必要材料，再根据当前现场决定怎样工作；不要机械重复上一次运行的动作。
 
-严格遵守：
-- 所有 Agent 上下级调用使用当前安装的 cc-use Skill，并使用唯一 session；不要在这里硬编码或猜测 cc-use 命令。
-- 无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置；遇到更新提示时跳过。
-- 不使用非交互式 Agent 模式代替 TUI。
-- 无论成功、Idle、部分失败还是无法继续，都要先对你创建的每个直属子 session 调用 cc-use finish，确认退出并复核无遗留 session。
-- 只有直属子 session 全部结束、相关报告已同步最终状态后，才能把一个 JSON 对象原子写入 {receipt_path}。至少包含 status、summary、projects、finished_at；先写同目录临时文件，再 rename。
-- 写完回执后等待 Runner 回收当前 session，不要自行启动新的长期循环。
+工作时遵守以下边界：
+- 通过当前安装的 cc-use Skill 管理所有下级 Agent，并为每个下级使用唯一 session；不要在这里硬编码或猜测 cc-use 的具体命令和参数。
+- 根据 Playbook、Harness 和实际结果组织下级 Prompt。不要因为时间经过、session 仍存活或屏幕暂时没有变化，就发送固定的“继续”Prompt。
+- 不使用非交互式 Agent 模式代替 TUI。无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。
+- 无论成功、Idle、部分失败还是无法继续，都先按当前 cc-use Skill 的退出流程关闭并复核自己创建的全部直属子 session。
+- 只有直属子 session 全部关闭、相关状态和报告已经更新后，才能把一个 JSON 对象原子写入 {receipt_path}。至少包含 status、summary、projects、finished_at；先写同目录临时文件，再重命名。
+- 写完回执后等待 Runner 回收当前 session，不要自行启动长期等待或定时 Prompt 循环。
 """
 
     def launch_top_level(

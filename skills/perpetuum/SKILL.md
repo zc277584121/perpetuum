@@ -21,6 +21,7 @@ Perpetuum 把一个或多个真实项目目录组织成可长期运行的 Agent 
 - **Task**：唯一的业务工作粒度。每个 Task 由 Explorer 选择、Executor 执行、Validator 独立验证。
 - **Reporter**：与 Root 工作链路独立的日报 Agent；即使业务链路异常，也会检查并报告运行情况。
 - **session**：一个由 tmux 承载的交互式 Agent TUI 会话。每个父节点只管理自己创建的直属 session。
+- **Playbook**：某个角色的软性工作指南，说明职责、判断方法、向下级组织 Prompt 时应包含的信息和结束条件；它不是必须逐字发送的固定 Prompt。
 
 完整的层级、职责和调用方向见 [architecture.md](references/architecture.md)。
 
@@ -32,11 +33,11 @@ Perpetuum 把一个或多个真实项目目录组织成可长期运行的 Agent 
 | 初始化或注册项目 | [setup.md](references/setup.md)，再读 [architecture.md](references/architecture.md) 和 [runtime.md](references/runtime.md) |
 | 启动、停止、查看、暂停、恢复或调整时间窗口 | [runtime.md](references/runtime.md) |
 | 处理人类指令、业务问题、管控异常或日报 | [human-communication.md](references/human-communication.md) |
-| 调整 Root Supervisor | [root-supervisor.md](references/templates/root-supervisor.md) |
-| 调整 Project Supervisor | [project-supervisor.md](references/templates/project-supervisor.md) |
-| 调整 Task 调度或 session 复用策略 | [task-supervisor.md](references/templates/task-supervisor.md) |
-| 调整 Task 的发现、执行或验证 | [explorer.md](references/templates/explorer.md)、[executor.md](references/templates/executor.md)、[validator.md](references/templates/validator.md) |
-| 生成或检查日报 | [reporter.md](references/templates/reporter.md) |
+| 调整 Root Supervisor | [root-supervisor.md](references/playbooks/root-supervisor.md) |
+| 调整 Project Supervisor | [project-supervisor.md](references/playbooks/project-supervisor.md) |
+| 调整 Task 调度或 session 复用策略 | [task-supervisor.md](references/playbooks/task-supervisor.md) |
+| 调整 Task 的发现、执行或验证 | [explorer.md](references/playbooks/explorer.md)、[executor.md](references/playbooks/executor.md)、[validator.md](references/playbooks/validator.md) |
+| 生成或检查日报 | [reporter.md](references/playbooks/reporter.md) |
 
 只读取与当前任务相关的参考；不要把全部参考文档无差别加载进上下文。
 
@@ -49,8 +50,10 @@ Perpetuum 把一个或多个真实项目目录组织成可长期运行的 Agent 
 5. 时间窗口只决定能否开始新 Task。已经开始的 Task 可以跨出时间窗口继续完成。
 6. 需要人类做业务选择时写入 `questions.md`；环境、权限、认证、进程、配额、磁盘、网络或基础设施问题写入 `escalations.md`。两者都必须写清背景、影响、证据、建议和人类需要做的最小决定。
 7. 无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。遇到更新提示时跳过并继续；因此无法继续时记录管控异常。
-8. Explorer 默认使用全新 session，Validator 与 Executor 保持独立；Executor 和 Validator 是否在后续轮次复用，由 Task Supervisor 根据任务上下文决定。详细策略只在 [task-supervisor.md](references/templates/task-supervisor.md) 维护。
-9. `project.yaml` 只记录 Agent 类型。Runner 通过 `PATH` 解析真实可执行文件并管理 Root 与 Reporter 的启动参数；下级 Agent 的运行细节由 cc-use 管理，不依赖 shell alias，也不写入项目配置。
+8. Runner 对每个新建的 Root 或 Reporter session 只发送一次中文启动 Prompt。session 存活期间不按时间重复注入 Prompt，也不因为暂时没有屏幕变化而发送固定的“继续”指令。
+9. 父 Supervisor 根据角色 Playbook、当前 Harness 和本次运行时上下文组织下级 Prompt。只有新建 session、收到实际结果、Validator 退回、人类补充决定或外部条件发生实质变化时，才发送新的 Prompt。
+10. Explorer 默认使用全新 session，Validator 与 Executor 保持独立；Executor 和 Validator 是否在后续轮次复用，由 Task Supervisor 根据任务上下文决定。详细策略只在 [task-supervisor.md](references/playbooks/task-supervisor.md) 维护。
+11. `project.yaml` 只记录 Agent 类型。Runner 通过 `PATH` 解析真实可执行文件并管理 Root 与 Reporter 的启动参数；下级 Agent 的运行细节由 cc-use 管理，不依赖 shell alias，也不写入项目配置。
 
 ## 脚本入口
 

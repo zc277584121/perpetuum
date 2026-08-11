@@ -62,7 +62,7 @@ class RunnerTests(unittest.TestCase):
             self.assertFalse(run_dir.exists())
             kill.assert_called_once_with("perpetuum-root-20260805-120000-a1b2c3")
 
-    def test_dispatch_uses_role_templates_subdirectory(self):
+    def test_dispatch_uses_role_playbooks_subdirectory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home, project_id = self.make_project(root)
@@ -83,9 +83,9 @@ class RunnerTests(unittest.TestCase):
                 "validator",
                 "reporter",
             ):
-                template = Path(dispatch["references"][key])
-                self.assertEqual(template.parent.name, "templates")
-                self.assertTrue(template.is_file())
+                playbook = Path(dispatch["references"][key])
+                self.assertEqual(playbook.parent.name, "playbooks")
+                self.assertTrue(playbook.is_file())
 
     def test_project_payload_ignores_legacy_agent_command(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -128,7 +128,7 @@ class RunnerTests(unittest.TestCase):
             build_command.assert_called_once_with("codex")
             self.assertEqual(launch.call_args.kwargs["command"], command)
 
-    def test_top_level_prompt_requires_child_cleanup_before_receipt(self):
+    def test_top_level_prompt_is_single_activation_with_cleanup_contract(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home, project_id = self.make_project(root)
@@ -141,11 +141,13 @@ class RunnerTests(unittest.TestCase):
 
             prompt = runner.build_prompt("reporter", dispatch, receipt)
 
-            cleanup = prompt.index("cc-use finish")
+            cleanup = prompt.index("直属子 session 全部关闭")
             write_receipt = prompt.index("原子写入")
             self.assertLess(cleanup, write_receipt)
-            self.assertIn("复核无遗留 session", prompt)
-            self.assertIn("报告已同步最终状态", prompt)
+            self.assertIn("这是一次新的独立激活", prompt)
+            self.assertIn("不要因为时间经过", prompt)
+            self.assertIn("角色 Playbook", prompt)
+            self.assertNotIn("cc-use finish", prompt)
 
     def test_missing_agent_binary_becomes_control_escalation(self):
         with tempfile.TemporaryDirectory() as directory:

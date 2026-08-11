@@ -29,6 +29,7 @@ Runner 只处理时间窗口、进程、HTTP 服务和顶层触发；Root 与 Pr
 - Explorer 持续维护唯一的 Task 列表。
 - 同一项目同时最多运行一个 Task，不同项目可以并行。
 - 时间窗口只限制新 Task 开始，已开始的 Task 可以跨出窗口完成。
+- 每个新 session 只接收一次启动 Prompt；角色根据 Playbook 和当前上下文组织后续 Prompt，不按时间重复灌入固定内容。
 - Questions 与 Escalations 分别承载业务判断和管控问题，并要求写清完整背景。
 - Reporter 独立检查运行状态，即使主工作链路中断也能在日报中暴露。
 - 前端默认监听 `127.0.0.1:8765`，远端机器可通过 SSH 端口转发查看。

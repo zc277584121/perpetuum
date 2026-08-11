@@ -74,6 +74,10 @@ Runner 只判断项目是否位于允许启动新 Task 的时间窗口内，或�
 
 `start` 启动一个轻量本地后台进程，同时运行 Scheduler、HTTP API 和前端。Runner 直接管理 Root 与 Reporter session；其他 session 由各自父 Supervisor 通过 `cc-use` 管理。所有 session 名必须唯一。
 
+Runner 为每个新建的 Root 或 Reporter session 发送一次中文启动 Prompt，主要提供本次 `dispatch.json`、角色 Playbook、`receipt.json` 路径和最小的生命周期边界。启动后，Runner 不再按时间向仍然存活的 session 注入 Prompt。长时间没有输出时保持观察；session 消失且没有回执时记录管控异常。
+
+下级 Prompt 由父 Supervisor 根据 Playbook 和当前上下文组织。新建 session、收到实际结果、验证退回、人类回复或外部条件变化可以触发新的 Prompt；定时轮询和屏幕静默不能单独触发 Prompt。
+
 Runner 通过当前 `PATH` 解析真实可执行文件，并使用参数数组直接启动，不经过 shell alias 或 function。顶层 Codex 使用 `--no-alt-screen --dangerously-bypass-approvals-and-sandbox`，顶层 Claude Code 使用 `--dangerously-skip-permissions`。这些参数只作用于 Runner 直接管理的 Root 与 Reporter；cc-use 独立管理所有下级 Agent 的命令、专用 tmux socket、锁和生命周期。
 
 调用 `start` 前先检查配置的监听地址。若该地址已经提供 Perpetuum API，并且 API 报告的运行时目录与本次 `home` 相同，直接复用现有服务。若属于不同运行时目录，报告冲突并停止；不要假装复用、自动关闭对方或选择备用端口。只有用户明确要求时才执行 `restart`。
