@@ -135,6 +135,25 @@ class RunnerTests(unittest.TestCase):
             build_command.assert_called_once_with("codex", home)
             self.assertEqual(launch.call_args.kwargs["command"], command)
 
+    def test_top_level_prompt_requires_child_cleanup_before_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, project_id = self.make_project(root)
+            runner = Runner(home)
+            payloads = runner.project_payloads([project_id])
+            _run_dir, dispatch, receipt, _run_id = runner.create_dispatch(
+                "reporter",
+                payloads,
+            )
+
+            prompt = runner.build_prompt("reporter", dispatch, receipt)
+
+            cleanup = prompt.index("cc-use finish")
+            write_receipt = prompt.index("原子写入")
+            self.assertLess(cleanup, write_receipt)
+            self.assertIn("复核无遗留 session", prompt)
+            self.assertIn("报告已同步最终状态", prompt)
+
     def test_missing_agent_binary_becomes_control_escalation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
