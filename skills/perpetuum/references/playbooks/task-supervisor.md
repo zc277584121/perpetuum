@@ -10,7 +10,7 @@ Task Supervisor 负责一次 Task 选择、执行和验证循环。Explorer 选�
 
 默认通过 `cc-use` 创建全新的 Explorer session。
 
-给 Explorer 的 Prompt 至少说明长期 Goal、当前 Plan、最近可信结果、人类约束、可用资源、项目中的当前证据，以及本轮只选择一个 Task。要求它返回选择理由、任务边界、证据来源和验收方向；没有值得做的 Task 时返回 Idle 并解释原因。
+给 Explorer 的 Prompt 至少说明当前承载它的 session 名称及上级所有权、长期 Goal、当前 Plan、最近可信结果、人类约束、可用资源、项目中的当前证据，以及本轮只选择一个 Task。要求它返回选择理由、任务边界、证据来源和验收方向；没有值得做的 Task 时返回 Idle 并解释原因。
 
 ## 调用 Executor
 
@@ -19,6 +19,7 @@ Explorer 选出 Task 后，为当前 Task 创建独立 Executor session。
 给 Executor 的 Prompt 至少说明：
 
 - 当前唯一 Task 及其与长期 Goal 的关系；
+- 当前承载 Executor 的 session 名称，并说明该 session 由 Task Supervisor 管理；
 - 已知事实、已有证据和仍不确定的内容；
 - 可以使用的环境、资源和权限；
 - 不能扩大或触碰的边界；
@@ -31,7 +32,7 @@ Task 较长、需要连续实验或多轮纠偏时可以保留同一 Executor se
 
 Executor 提供可验证结果后，启动与 Executor 分离的 Validator，首次验证默认使用全新 session。
 
-给 Validator 的 Prompt 至少说明 Task、边界、Executor 声明的结果、证据位置和验收方向。不要暗示它应该接受结果，也不要隐瞒失败、不确定性或未验证内容。
+给 Validator 的 Prompt 至少说明当前承载它的 session 名称及上级所有权、Task、边界、Executor 声明的结果、证据位置和验收方向。不要暗示它应该接受结果，也不要隐瞒失败、不确定性或未验证内容。
 
 Validator 接受后，更新 Plan 和 History。Validator 退回时，根据反馈范围和上下文污染程度决定继续使用原 Executor、创建新 Executor、保留原 Validator 复验或创建新 Validator。后续 Prompt 必须针对具体反馈，不发送泛化的“继续优化”。
 
@@ -40,7 +41,7 @@ Validator 接受后，更新 Plan 和 History。Validator 退回时，根据反�
 - Explorer 完成 Task 发现和选择后即可关闭，不长期保留为执行上下文。
 - Executor 可以根据任务连续性保留多轮，也可以在一次性工作完成后关闭。
 - Validator 与 Executor 始终分离；小修复后的复验可以保留原 Validator，大改、锚定风险或上下文污染时创建新的 Validator。
-- 所有 session 使用唯一名称；结束前按当前 `cc-use` Skill 的退出流程关闭并复核自己创建的全部直属 session。
+- 所有 session 使用唯一名称；创建后立即保存精确名称。结束前按当前 `cc-use` Skill 的退出流程关闭并复核本次明确创建的全部直属 session，不根据全局列表操作来源不明的 session。
 
 ## 状态与结果
 

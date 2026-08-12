@@ -39,7 +39,9 @@ Runner 对每个新建的 Root 或 Reporter session 只发送一次启动 Prompt
 
 `project.yaml` 只保存 `codex` 或 `claude` 类型，不保存启动命令。Codex、Claude Code 的顶层启动参数由 Runner 统一管理；cc-use 管理下级 Agent 的启动参数和运行资源。
 
-每个父节点只管理自己创建的直属 session。父节点结束前必须确认直属子 session 已经关闭；Runner 最后关闭 Root 或 Reporter session。所有 session 使用唯一名称，不复用固定名称，也不以“先替换同名 session”作为正常流程。
+每个 Supervisor 都运行在上级为它创建的承载 session 中，同时可以为下级创建直属子 session。当前承载 session 不属于它自己管理；每个父节点只管理本次由自己明确创建并保存了精确名称的直属子 session。全局 session 列表、名称、目录、创建时间和项目状态只能用于观察，不能证明所有权。来源不明的 session 保持不动并向上级报告。父节点结束前必须确认直属子 session 已经关闭；Runner 最后关闭 Root 或 Reporter session。所有 session 使用唯一名称，不复用固定名称，也不以“先替换同名 session”作为正常流程。
+
+父节点创建下级后，把下级当前承载 session 的精确名称写入首次 Prompt，并说明该 session 由上级管理；下级不得关闭、接管或向自己的承载 session 发送消息。
 
 ## 并发
 

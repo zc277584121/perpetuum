@@ -408,7 +408,7 @@ function renderProject() {
   document.getElementById("project-status").textContent = statusLabel(displayStatus);
   document.getElementById("runtime-summary").textContent = summary.paused
     ? "项目已暂停，不会开始新的 Task。"
-    : `${runtime.active_sessions?.length || 0} 个活跃 Agent 会话`;
+    : `${runtime.active_sessions?.length || 0} 个已登记活动会话`;
   document.getElementById("window-summary").textContent = (summary.windows || []).join("，") || "未配置";
 
   const windowInput = document.getElementById("window-text");
@@ -443,7 +443,7 @@ function renderProject() {
   replaceDefinitions(document.getElementById("agent-details"), [
     ["Agent", project.agent?.kind || "未配置"],
     ["启动方式", "Runner 统一管理"],
-    ["活跃会话", sessionSummary],
+    ["已登记会话", sessionSummary],
     ["项目状态", statusLabel(displayStatus)],
     ["最近活动", formatTime(summary.last_activity_at)],
   ]);

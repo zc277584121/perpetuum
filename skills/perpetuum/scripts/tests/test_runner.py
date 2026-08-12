@@ -29,6 +29,7 @@ class RunnerTests(unittest.TestCase):
             run_dir, dispatch, receipt, run_id = runner.create_dispatch(
                 "root",
                 payloads,
+                "perpetuum-root-20260812-120000-a1b2c3",
             )
             storage.write_json(
                 receipt,
@@ -71,9 +72,14 @@ class RunnerTests(unittest.TestCase):
             _run_dir, dispatch_path, _receipt, _run_id = runner.create_dispatch(
                 "root",
                 payloads,
+                "perpetuum-root-20260812-120000-a1b2c3",
             )
 
             dispatch = storage.read_json(dispatch_path)
+            self.assertEqual(
+                dispatch["carrier_session"],
+                "perpetuum-root-20260812-120000-a1b2c3",
+            )
             for key in (
                 "root_supervisor",
                 "project_supervisor",
@@ -115,6 +121,9 @@ class RunnerTests(unittest.TestCase):
                 "perpetuum_app.runner.sessions.agent_command",
                 return_value=command,
             ) as build_command, mock.patch(
+                "perpetuum_app.runner.sessions.session_name",
+                return_value="perpetuum-root-20260811-120000-a1b2c3",
+            ), mock.patch(
                 "perpetuum_app.runner.sessions.launch_session",
                 return_value="perpetuum-root-20260811-120000-a1b2c3",
             ) as launch:
@@ -127,6 +136,10 @@ class RunnerTests(unittest.TestCase):
             self.assertIsNotNone(active)
             build_command.assert_called_once_with("codex")
             self.assertEqual(launch.call_args.kwargs["command"], command)
+            self.assertEqual(
+                launch.call_args.kwargs["name"],
+                "perpetuum-root-20260811-120000-a1b2c3",
+            )
 
     def test_top_level_prompt_is_single_activation_with_cleanup_contract(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -137,9 +150,15 @@ class RunnerTests(unittest.TestCase):
             _run_dir, dispatch, receipt, _run_id = runner.create_dispatch(
                 "reporter",
                 payloads,
+                "perpetuum-reporter-20260812-120000-a1b2c3",
             )
 
-            prompt = runner.build_prompt("reporter", dispatch, receipt)
+            prompt = runner.build_prompt(
+                "reporter",
+                dispatch,
+                receipt,
+                "perpetuum-reporter-20260812-120000-a1b2c3",
+            )
 
             cleanup = prompt.index("直属子 session 全部关闭")
             write_receipt = prompt.index("原子写入")
@@ -147,6 +166,11 @@ class RunnerTests(unittest.TestCase):
             self.assertIn("这是一次新的独立激活", prompt)
             self.assertIn("不要因为时间经过", prompt)
             self.assertIn("角色 Playbook", prompt)
+            self.assertIn(
+                "当前承载 session：perpetuum-reporter-20260812-120000-a1b2c3",
+                prompt,
+            )
+            self.assertIn("不能证明所有权", prompt)
             self.assertNotIn("cc-use finish", prompt)
 
     def test_missing_agent_binary_becomes_control_escalation(self):
@@ -181,6 +205,7 @@ class RunnerTests(unittest.TestCase):
             run_dir, dispatch, receipt, run_id = runner.create_dispatch(
                 "root",
                 payloads,
+                "perpetuum-root-20260812-120000-a1b2c3",
             )
             runner.state["active_root"] = {
                 "role": "root",

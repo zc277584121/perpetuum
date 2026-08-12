@@ -55,7 +55,7 @@ Runner 只判断项目是否位于允许启动新 Task 的时间窗口内，或�
 - `control_blocked`：环境、权限、认证、进程或基础设施阻止继续运行；
 - `paused`：人类已暂停该项目的新 Task。
 
-项目状态同时保存当前 Task、最近活动时间和活动 session。
+项目状态同时保存当前 Task、最近活动时间和已登记的活动 session。`active_sessions` 用于前端展示和诊断，是各层运行中写入的尽力记录，不是 cc-use 或 tmux 的全局权威清单，也不授予关闭权限。它可以不包含当前 Supervisor 自己的承载 session；列表为空时，也不能把其他可见 session 判定为残留。Supervisor 只能操作本次由自己明确创建并保存了精确名称的直属子 session。
 
 `events.log` 使用一行一个 JSON 事件，只保存运行流水。完成 Task 的可信结论写入 `history.md`，不要把每次轮询或每轮对话都写入 History。
 
@@ -74,7 +74,7 @@ Runner 只判断项目是否位于允许启动新 Task 的时间窗口内，或�
 
 `start` 启动一个轻量本地后台进程，同时运行 Scheduler、HTTP API 和前端。Runner 直接管理 Root 与 Reporter session；其他 session 由各自父 Supervisor 通过 `cc-use` 管理。所有 session 名必须唯一。
 
-Runner 为每个新建的 Root 或 Reporter session 发送一次中文启动 Prompt，主要提供本次 `dispatch.json`、角色 Playbook、`receipt.json` 路径和最小的生命周期边界。启动后，Runner 不再按时间向仍然存活的 session 注入 Prompt。长时间没有输出时保持观察；session 消失且没有回执时记录管控异常。
+Runner 为每个新建的 Root 或 Reporter session 发送一次中文启动 Prompt，主要提供当前承载 session 名称、本次 `dispatch.json`、角色 Playbook、`receipt.json` 路径和最小的生命周期边界。当前承载 session 由 Runner 管理，顶层 Agent 不自行关闭或接管。启动后，Runner 不再按时间向仍然存活的 session 注入 Prompt。长时间没有输出时保持观察；session 消失且没有回执时记录管控异常。
 
 下级 Prompt 由父 Supervisor 根据 Playbook 和当前上下文组织。新建 session、收到实际结果、验证退回、人类回复或外部条件变化可以触发新的 Prompt；定时轮询和屏幕静默不能单独触发 Prompt。
 

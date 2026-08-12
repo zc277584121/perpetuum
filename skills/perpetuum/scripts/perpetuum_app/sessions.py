@@ -9,7 +9,7 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Sequence
+from typing import List, Optional, Sequence
 
 
 AGENT_ARGUMENTS = {
@@ -82,8 +82,9 @@ def launch_session(
     prompt: str,
     startup_seconds: int = 8,
     kind: str = "codex",
+    name: Optional[str] = None,
 ) -> str:
-    name = session_name(role)
+    name = name or session_name(role)
     argv = list(command)
     if not argv:
         raise RuntimeError("Agent 启动命令为空")

@@ -124,6 +124,7 @@ class Runner:
         self,
         role: str,
         projects: List[Dict[str, Any]],
+        carrier_session: str,
     ) -> Tuple[Path, Path, Path, str]:
         run_id = (
             f"{role}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-"
@@ -155,6 +156,7 @@ class Runner:
             "created_at": storage.utc_now(),
             "perpetuum_home": str(self.home),
             "runner_state": str(storage.runner_state_path(self.home)),
+            "carrier_session": carrier_session,
             "projects": projects,
             "references": references,
             "receipt_path": str(receipt_path),
@@ -167,6 +169,7 @@ class Runner:
         role: str,
         dispatch_path: Path,
         receipt_path: Path,
+        carrier_session: str,
     ) -> str:
         if role == "root":
             role_name = "Root Supervisor"
@@ -187,11 +190,14 @@ class Runner:
 本次 dispatch：{dispatch_path}
 角色 Playbook：{playbook_path}
 完成回执：{receipt_path}
+当前承载 session：{carrier_session}
 
 这是一次新的独立激活。先完整读取 dispatch、角色 Playbook 和其中要求的必要材料，再根据当前现场决定怎样工作；不要机械重复上一次运行的动作。
 
 工作时遵守以下边界：
+- 当前承载 session 由 Runner 创建和回收，不是你创建的直属子 session；不要关闭、接管或向它发送消息。
 - 通过当前安装的 cc-use Skill 管理所有下级 Agent，并为每个下级使用唯一 session；不要在这里硬编码或猜测 cc-use 的具体命令和参数。
+- 只管理本次由你明确创建并保存了精确名称的直属子 session；全局 session 列表和项目状态只用于观察，不能证明所有权。
 - 根据 Playbook、Harness 和实际结果组织下级 Prompt。不要因为时间经过、session 仍存活或屏幕暂时没有变化，就发送固定的“继续”Prompt。
 - 不使用非交互式 Agent 模式代替 TUI。无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。
 - 无论成功、Idle、部分失败还是无法继续，都先按当前 cc-use Skill 的退出流程关闭并复核自己创建的全部直属子 session。
@@ -209,16 +215,23 @@ class Runner:
         if not projects:
             return None
 
+        carrier_session = sessions.session_name(role)
         run_dir, dispatch_path, receipt_path, run_id = self.create_dispatch(
             role,
             projects,
+            carrier_session,
         )
         first_agent = projects[0].get("agent", {})
         kind = str(first_agent.get("kind", "codex"))
         startup_seconds = int(
             config.get("service", {}).get("agent_startup_seconds", 8)
         )
-        prompt = self.build_prompt(role, dispatch_path, receipt_path)
+        prompt = self.build_prompt(
+            role,
+            dispatch_path,
+            receipt_path,
+            carrier_session,
+        )
         try:
             command = sessions.agent_command(kind)
             session = sessions.launch_session(
@@ -228,6 +241,7 @@ class Runner:
                 prompt=prompt,
                 startup_seconds=startup_seconds,
                 kind=kind,
+                name=carrier_session,
             )
         except Exception as exc:
             self.cleanup_run_dir(run_dir)

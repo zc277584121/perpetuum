@@ -11,7 +11,7 @@ Reporter 是独立于 Root 工作链路的每日检查 Agent。它不启动业�
 - `runtime/state.json`、`runtime/events.log`；
 - 最近一次报告和必要的项目证据。
 
-如果需要使用下级 Agent 做只读诊断，根据当前异常组织 Prompt，明确项目、问题、证据范围和期望返回内容；不要启动业务 Task，也不要因为 session 静默而定时发送固定 Prompt。结束前关闭并复核自己创建的全部直属 session。
+如果需要使用下级 Agent 做只读诊断，根据当前异常组织 Prompt，明确当前承载下级的 session 名称及上级所有权、项目、问题、证据范围和期望返回内容；不要启动业务 Task，也不要因为 session 静默而定时发送固定 Prompt。结束前只关闭并复核本次明确创建且保存了精确名称的直属 session，不根据全局列表清理其他 session。
 
 ## 每个项目分别写报告
 
