@@ -33,6 +33,8 @@ Runner 直接启动 Root 与 Reporter 这两个彼此独立的顶层 TUI。Root 
 
 所有 Agent 上下级调用都使用当前安装的 `cc-use` Skill。Perpetuum 只用自然语言说明要创建、观察或关闭哪一个下级 session，不保存或复制 `cc-use` 的具体命令和参数。
 
+调用下级时遵循当前 `cc-use` Skill 的完整调用生命周期。在调用最终返回前，不根据中间状态或临时空输出判断 session 创建成功、失败或回执缺失。
+
 每个角色读取自己的 Playbook。Playbook 是软性工作指南，不是需要逐字复制的固定 Prompt。父 Supervisor 应结合 Playbook、当前 Harness、运行时状态和现场判断，向下级说明本次为什么开始、要读取什么、边界在哪里、期望返回什么以及何时停止。
 
 Runner 对每个新建的 Root 或 Reporter session 只发送一次启动 Prompt。其他 Prompt 由父 Supervisor 在新建下级 session、收到实际结果、Validator 退回、人类补充决定或外部条件发生实质变化时发送。时间经过、session 仍存活或屏幕暂时没有变化，本身都不是发送新 Prompt 的理由。
