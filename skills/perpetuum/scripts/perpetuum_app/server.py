@@ -17,6 +17,7 @@ from . import storage
 
 
 PROJECT_PATH = re.compile(r"^/api/projects/([^/]+)(?:/(inbox|response|control))?$")
+STORY_PATH = re.compile(r"^/api/projects/([^/]+)/stories(?:/([^/]+))?$")
 
 
 def process_alive(pid: Any) -> bool:
@@ -43,7 +44,8 @@ def project_summary(home: Path, project_id: str, activation: Dict[str, Any]) -> 
         "path": project.get("path", ""),
         "agent": project.get("agent", {}),
         "status": state.get("status", "unknown"),
-        "current_task": state.get("current_task"),
+        "current_story": state.get("current_story"),
+        "story_phase": state.get("story_phase"),
         "last_activity_at": state.get("last_activity_at"),
         "last_result": state.get("last_result"),
         "paused": bool(entry.get("paused", False)),
@@ -81,7 +83,6 @@ def project_detail(home: Path, project_id: str) -> Dict[str, Any]:
     files = {}
     for name in (
         "goal.md",
-        "plan.md",
         "history.md",
         "inbox.md",
         "questions.md",
@@ -97,6 +98,7 @@ def project_detail(home: Path, project_id: str) -> Dict[str, Any]:
         "summary": project_summary(home, project_id, activation),
         "project": storage.load_project(home, project_id),
         "runtime": storage.load_project_state(home, project_id),
+        "stories": storage.list_stories(home, project_id),
         "files": files,
     }
 
@@ -138,17 +140,81 @@ def handler_factory(home: Path) -> Any:
             if parsed.path == "/api/status":
                 self.send_json(global_status(home))
                 return
+            story_match = STORY_PATH.fullmatch(parsed.path)
+            if story_match and story_match.group(2):
+                try:
+                    self.send_json(
+                        storage.load_story(
+                            home,
+                            unquote(story_match.group(1)),
+                            unquote(story_match.group(2)),
+                        )
+                    )
+                except ValueError as exc:
+                    self.send_error_json(HTTPStatus.NOT_FOUND, str(exc))
+                return
             match = PROJECT_PATH.fullmatch(parsed.path)
             if match and not match.group(2):
                 try:
                     self.send_json(project_detail(home, unquote(match.group(1))))
                 except KeyError:
                     self.send_error_json(HTTPStatus.NOT_FOUND, "项目不存在")
+                except ValueError as exc:
+                    self.send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
                 return
             self.serve_static(parsed.path)
 
         def do_POST(self) -> None:
             parsed = urlparse(self.path)
+            story_match = STORY_PATH.fullmatch(parsed.path)
+            if story_match:
+                project_id = unquote(story_match.group(1))
+                story_id = unquote(story_match.group(2)) if story_match.group(2) else None
+                try:
+                    body = read_body(self)
+                    if storage.load_project(home, project_id) is None:
+                        raise KeyError(project_id)
+                    if story_id:
+                        changes = {
+                            key: body[key]
+                            for key in storage.STORY_MUTABLE_FIELDS
+                            if key in body
+                        }
+                        story = storage.update_story(
+                            home,
+                            project_id,
+                            story_id,
+                            changes,
+                            body=str(body["body"]) if "body" in body else None,
+                        )
+                        event = "story_updated"
+                    else:
+                        story = storage.create_story(
+                            home,
+                            project_id,
+                            str(body.get("title", "")),
+                            str(body.get("summary", "")),
+                            story_id=str(body["id"]) if body.get("id") else None,
+                            status=str(body.get("status", "ready")),
+                            priority=str(body.get("priority", "P1")),
+                            labels=body.get("labels") if isinstance(body.get("labels"), list) else [],
+                            body=str(body["body"]) if "body" in body else None,
+                        )
+                        event = "story_created"
+                    storage.append_event(
+                        storage.project_dir(home, project_id) / "runtime" / "events.log",
+                        event,
+                        story_id=story["metadata"]["id"],
+                        source="frontend",
+                    )
+                    self.send_json({"ok": True, "story": story})
+                except KeyError:
+                    self.send_error_json(HTTPStatus.NOT_FOUND, "项目不存在")
+                except (ValueError, json.JSONDecodeError) as exc:
+                    self.send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                except OSError as exc:
+                    self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
+                return
             match = PROJECT_PATH.fullmatch(parsed.path)
             if not match or not match.group(2):
                 self.send_error_json(HTTPStatus.NOT_FOUND, "接口不存在")

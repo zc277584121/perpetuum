@@ -327,6 +327,120 @@ def project_window(home: Path, project_id: str, windows: Any) -> int:
     return 0
 
 
+def story_list(home: Path, project_id: str, as_json: bool) -> int:
+    try:
+        stories = storage.list_stories(home, project_id)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if as_json:
+        print(json.dumps(stories, ensure_ascii=False, indent=2))
+        return 0
+    if not stories:
+        print("尚未建立 Story。")
+        return 0
+    for story in stories:
+        labels = ", ".join(story.get("labels", [])) or "无标签"
+        print(
+            f"{story['id']}: [{story['priority']}] {story['title']} · "
+            f"{story['status']}\n  {story['summary']}\n  标签：{labels}"
+        )
+    return 0
+
+
+def story_show(home: Path, project_id: str, story_id: str, as_json: bool) -> int:
+    try:
+        story = storage.load_story(home, project_id, story_id)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if as_json:
+        print(json.dumps(story, ensure_ascii=False, indent=2))
+    else:
+        print(Path(story["path"]).read_text(encoding="utf-8"), end="")
+    return 0
+
+
+def story_create(args: argparse.Namespace, home: Path) -> int:
+    body = None
+    if args.body_file:
+        try:
+            body = args.body_file.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+    try:
+        story = storage.create_story(
+            home,
+            args.project_id,
+            args.title,
+            args.summary,
+            story_id=args.id,
+            status=args.status,
+            priority=args.priority,
+            labels=args.label,
+            body=body,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    metadata = story["metadata"]
+    print(f"Story 已创建：{metadata['id']} · {metadata['title']}")
+    print(f"文件：{story['path']}")
+    return 0
+
+
+def story_update(args: argparse.Namespace, home: Path) -> int:
+    changes = {}
+    for field in ("title", "summary", "status", "priority"):
+        value = getattr(args, field)
+        if value is not None:
+            changes[field] = value
+    if args.label is not None:
+        changes["labels"] = args.label
+    if args.waiting_on is not None:
+        changes["waiting_on"] = args.waiting_on
+    body = None
+    if args.body_file:
+        try:
+            body = args.body_file.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+    if not changes and body is None:
+        print("至少提供一个需要更新的字段或正文文件。", file=sys.stderr)
+        return 2
+    try:
+        story = storage.update_story(
+            home,
+            args.project_id,
+            args.story_id,
+            changes,
+            body=body,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    metadata = story["metadata"]
+    print(f"Story 已更新：{metadata['id']} · {metadata['status']} · {metadata['priority']}")
+    return 0
+
+
+def story_archive(home: Path, project_id: str, story_id: str) -> int:
+    try:
+        story = storage.update_story(
+            home,
+            project_id,
+            story_id,
+            {"status": "cancelled"},
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(f"Story 已归档：{story['metadata']['id']}")
+    return 0
+
+
 def request_report(home: Path) -> int:
     config = storage.ensure_home(home)
     report = config.setdefault("report", {})
@@ -397,7 +511,7 @@ def build_parser() -> argparse.ArgumentParser:
     list_parser.add_argument("--json", action="store_true")
 
     for action, help_text in (
-        ("pause", "暂停项目的新 Task"),
+        ("pause", "暂停项目的新 Story"),
         ("resume", "恢复项目"),
         ("run", "立即触发项目"),
     ):
@@ -407,6 +521,43 @@ def build_parser() -> argparse.ArgumentParser:
     window = project_subparsers.add_parser("window", help="设置项目时间窗口")
     window.add_argument("project_id")
     window.add_argument("windows", nargs="+", help="例如 00:00-06:00")
+
+    story = subparsers.add_parser("story", help="管理 Story 看板")
+    story_subparsers = story.add_subparsers(dest="story_command", required=True)
+
+    story_list_parser = story_subparsers.add_parser("list", help="只列出 Story 元数据")
+    story_list_parser.add_argument("project_id")
+    story_list_parser.add_argument("--json", action="store_true")
+
+    story_show_parser = story_subparsers.add_parser("show", help="读取一个 Story")
+    story_show_parser.add_argument("project_id")
+    story_show_parser.add_argument("story_id")
+    story_show_parser.add_argument("--json", action="store_true")
+
+    story_create_parser = story_subparsers.add_parser("create", help="创建 Story")
+    story_create_parser.add_argument("project_id")
+    story_create_parser.add_argument("--id")
+    story_create_parser.add_argument("--title", required=True)
+    story_create_parser.add_argument("--summary", required=True)
+    story_create_parser.add_argument("--status", choices=storage.STORY_STATUSES, default="ready")
+    story_create_parser.add_argument("--priority", choices=storage.STORY_PRIORITIES, default="P1")
+    story_create_parser.add_argument("--label", action="append", default=[])
+    story_create_parser.add_argument("--body-file", type=Path)
+
+    story_update_parser = story_subparsers.add_parser("update", help="更新 Story")
+    story_update_parser.add_argument("project_id")
+    story_update_parser.add_argument("story_id")
+    story_update_parser.add_argument("--title")
+    story_update_parser.add_argument("--summary")
+    story_update_parser.add_argument("--status", choices=storage.STORY_STATUSES)
+    story_update_parser.add_argument("--priority", choices=storage.STORY_PRIORITIES)
+    story_update_parser.add_argument("--label", action="append")
+    story_update_parser.add_argument("--waiting-on", choices=("human", "control", "external"))
+    story_update_parser.add_argument("--body-file", type=Path)
+
+    story_archive_parser = story_subparsers.add_parser("archive", help="归档 Story")
+    story_archive_parser.add_argument("project_id")
+    story_archive_parser.add_argument("story_id")
     return parser
 
 
@@ -441,6 +592,17 @@ def main() -> None:
         raise SystemExit(
             project_control(home, args.project_id, args.project_command)
         )
+    if args.command == "story":
+        if args.story_command == "list":
+            raise SystemExit(story_list(home, args.project_id, args.json))
+        if args.story_command == "show":
+            raise SystemExit(story_show(home, args.project_id, args.story_id, args.json))
+        if args.story_command == "create":
+            raise SystemExit(story_create(args, home))
+        if args.story_command == "update":
+            raise SystemExit(story_update(args, home))
+        if args.story_command == "archive":
+            raise SystemExit(story_archive(home, args.project_id, args.story_id))
 
 
 if __name__ == "__main__":

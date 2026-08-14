@@ -2,96 +2,115 @@
 
 ## 目录
 
+默认运行目录：
+
 ```text
 ~/.perpetuum/
 ├── activation.yaml
 ├── runner/
 │   ├── state.json
 │   ├── events.log
-│   └── runs/
-│       └── <run-id>/
-│           ├── dispatch.json
-│           └── receipt.json
-└── projects/
-    └── <project-id>/
-        ├── project.yaml
-        ├── goal.md
-        ├── plan.md
-        ├── history.md
-        ├── inbox.md
-        ├── questions.md
-        ├── escalations.md
-        ├── reports/
-        │   ├── latest.md
-        │   └── YYYY-MM-DD.md
-        └── runtime/
-            ├── state.json
-            └── events.log
+│   └── runs/<run-id>/
+│       ├── dispatch.json
+│       └── receipt.json
+└── projects/<project-id>/
+    ├── project.yaml
+    ├── goal.md
+    ├── stories/
+    │   └── S-*.md
+    ├── history.md
+    ├── inbox.md
+    ├── questions.md
+    ├── escalations.md
+    ├── reports/
+    └── runtime/
+        ├── state.json
+        └── events.log
 ```
 
-`~/.perpetuum/` 是默认运行时目录。每个 `projects/<project-id>/` 是一个 Project 的 Harness；它只保存长期运行资料，不复制项目源码。
+`activation.yaml` 与 `project.yaml` 使用 JSON 语法保存。Story 使用 YAML front matter + Markdown 正文。`runner/runs/` 是一次顶层调用的临时交接目录，完成后清理，不成为业务事实来源。
 
-`runner/runs/` 保存当前顶层调用的临时交接文件：`dispatch.json` 是 Runner 交给 Root 或 Reporter 的本次任务说明，`receipt.json` 是顶层 Agent 完成清理后写回的结果。Runner 处理完成后会删除对应的临时目录，因此它们不是长期业务记录。
+## Story 选择与时间窗口
 
-`activation.yaml` 和 `project.yaml` 使用 JSON 兼容的 YAML 子集，因此文件既是有效 YAML，也能由无第三方依赖的 Runner 直接读取。不要在其中加入 YAML 专有语法。
+Runner 继续按照现有机制判断项目是否位于允许开始新 Story 的时间窗口内，或是否收到“立即运行”请求；它不读取 Goal 或 Story，也不决定业务优先级。本次重构不改变 Root 和 Project 的时间调度。
 
-`project.yaml` 的 `agent` 只记录 `kind`，值为 `codex` 或 `claude`。项目配置不保存启动命令和宿主机权限参数。
+Project Supervisor 被激活后：
 
-## 激活配置
+1. 先吸收人类输入和已回答问题；
+2. 读取全部 Story 元数据；
+3. 有 `in_progress` Story 时优先恢复；
+4. 否则从 `ready` 中选择当前最值得执行的一张；
+5. 没有可运行 Story 时调用一次 Explorer，再重新读取列表；
+6. 仍然没有则进入 Idle。
 
-全局配置包含时区、检查间隔、日报时间、前端监听地址和各项目时间窗口。默认每 30 分钟检查一次。窗口支持跨午夜；`00:00-24:00` 表示全天。
+时间窗口只限制新 Story 的开始。已开始的 Story 可以跨出窗口继续完成，不设置固定 Story 时长。
 
-Runner 只判断项目是否位于允许启动新 Task 的时间窗口内，或是否收到“立即运行”请求；它不读取 Goal，也不决定具体业务。Runner 汇总本次符合条件的项目后，始终从 Root 向下调用。
+## 项目状态
 
-时间窗口只限制新 Task 的开始。窗口关闭时不打断正在执行的 Task，也不设置固定 Task 时长。
+- `idle`：当前没有 Story session 在运行；
+- `working`：正在执行或验证一个 Story；
+- `waiting_human`：当前 Story 已保存现场并关闭 session，等待人类业务决定；
+- `control_blocked`：当前 Story 已保存现场并关闭 session，等待环境或运行机制恢复；
+- `paused`：人类已暂停该项目开始新 Story。
 
-## 状态
+新 Harness 的 `runtime/state.json` 使用：
 
-`runner/state.json` 记录服务 PID、最近检查、下次检查、Root/Reporter session 和最后错误。项目 `runtime/state.json` 记录当前状态：
+```json
+{
+  "version": 2,
+  "status": "idle",
+  "current_story": null,
+  "story_phase": null,
+  "active_sessions": [],
+  "last_activity_at": "...",
+  "last_result": "..."
+}
+```
 
-- `idle`：当前没有 Task 在运行；
-- `working`：正在执行一个 Task；
-- `waiting_human`：需要人类完成业务判断；
-- `control_blocked`：环境、权限、认证、进程或基础设施阻止继续运行；
-- `paused`：人类已暂停该项目的新 Task。
+`story_phase` 可以是 `executing`、`validating` 或 `exploring`。它只用于前端和诊断，不写进 Story front matter。
 
-项目状态同时保存当前 Task、最近活动时间和已登记的活动 session。`active_sessions` 用于前端展示和诊断，是各层运行中写入的尽力记录，不是 cc-use 或 tmux 的全局权威清单，也不授予关闭权限。它可以不包含当前 Supervisor 自己的承载 session；列表为空时，也不能把其他可见 session 判定为残留。Supervisor 只能操作本次由自己明确创建并保存了精确名称的直属子 session。
+`active_sessions` 是各层运行中写入的尽力记录，不是 cc-use 或 tmux 的全局权威清单，也不授予关闭权限。Supervisor 只能操作本次由自己明确创建并保存了精确名称的直属子 session。
 
-`events.log` 使用一行一个 JSON 事件，只保存运行流水。完成 Task 的可信结论写入 `history.md`，不要把每次轮询或每轮对话都写入 History。
+## 等待时关闭
 
-状态文件需要先写临时文件再原子替换。日志使用追加写。Runner 的临时 `dispatch.json` 和 `receipt.json` 完成后清理，不成为业务事实来源。
+Story 需要等待人类、管控处理或长期外部条件时：
 
-## 进程与 Session
+1. 更新 Story 正文的当前进展、证据、等待原因和恢复上下文；
+2. front matter 改为 `status: waiting`，并写入 `waiting_on`；
+3. 业务问题写入 `questions.md`，管控异常写入 `escalations.md`，并关联 Story ID；
+4. 关闭 Executor、Validator 和 Story Supervisor session；
+5. 清空 `current_story`、`story_phase` 和 `active_sessions`；
+6. Project 后续可以执行其他 `ready` Story。
 
-单一命令入口如下。`<skill-directory>` 表示当前安装的 Perpetuum Skill 目录；只有脚本已加入 `PATH` 时才省略前缀。
+人类回答或条件恢复后，Project Supervisor 把原 Story 改回 `ready`，下一次使用新的物理 session 恢复同一个 Story。Validator 普通退回不属于等待，继续使用原 Executor 和原 Validator。
 
-```text
+## 状态写入
+
+状态文件先写临时文件再原子替换，日志使用追加写。`events.log` 只保存运行流水；完成 Story 的可信结论写入 `history.md`，未验证的中间进展保存在 Story 正文。
+
+## 顶层生命周期
+
+Runner 为每个新建的 Root 或 Reporter session 发送一次中文启动 Prompt，提供 dispatch、Playbook、receipt 和承载 session。当前承载 session 由 Runner 管理。Runner 不按时间向仍然存活的 session 注入固定 Prompt，也不通过屏幕文本判断完成。
+
+Root 和 Reporter 按既有回执机制工作：直属 session 全部关闭并完成状态更新后，原子写入 `receipt.json`，Runner 才回收顶层 session。
+
+## 常用入口
+
+```bash
+<skill-directory>/scripts/perpetuum init
 <skill-directory>/scripts/perpetuum start
-<skill-directory>/scripts/perpetuum stop
-<skill-directory>/scripts/perpetuum restart
 <skill-directory>/scripts/perpetuum status
+<skill-directory>/scripts/perpetuum project list
+<skill-directory>/scripts/perpetuum story list <project-id> --json
+<skill-directory>/scripts/perpetuum stop
 ```
 
-`start` 启动一个轻量本地后台进程，同时运行 Scheduler、HTTP API 和前端。Runner 直接管理 Root 与 Reporter session；其他 session 由各自父 Supervisor 通过 `cc-use` 管理。所有 session 名必须唯一。
+`start` 发现同一 home 的前端已经运行时直接复用；发现不同 home 或其他服务占用端口时明确报错，不自动换端口或结束其他服务。
 
-Runner 为每个新建的 Root 或 Reporter session 发送一次中文启动 Prompt，主要提供当前承载 session 名称、本次 `dispatch.json`、角色 Playbook、`receipt.json` 路径和最小的生命周期边界。当前承载 session 由 Runner 管理，顶层 Agent 不自行关闭或接管。启动后，Runner 不再按时间向仍然存活的 session 注入 Prompt。长时间没有输出时保持观察；session 消失且没有回执时记录管控异常。
-
-下级 Prompt 由父 Supervisor 根据 Playbook 和当前上下文组织。新建 session、收到实际结果、验证退回、人类回复或外部条件变化可以触发新的 Prompt；定时轮询和屏幕静默不能单独触发 Prompt。
-
-Runner 通过当前 `PATH` 解析真实可执行文件，并使用参数数组直接启动，不经过 shell alias 或 function。顶层 Codex 使用 `--no-alt-screen --dangerously-bypass-approvals-and-sandbox`，顶层 Claude Code 使用 `--dangerously-skip-permissions`。这些参数只作用于 Runner 直接管理的 Root 与 Reporter；cc-use 独立管理所有下级 Agent 的命令、专用 tmux socket、锁和生命周期。
-
-调用 `start` 前先检查配置的监听地址。若该地址已经提供 Perpetuum API，并且 API 报告的运行时目录与本次 `home` 相同，直接复用现有服务。若属于不同运行时目录，报告冲突并停止；不要假装复用、自动关闭对方或选择备用端口。只有用户明确要求时才执行 `restart`。
-
-Runner 不通过 TUI 屏幕文本判断完成。它为 Root 和 Reporter 提供一次性 `receipt.json` 回执路径，Agent 原子写入结果后，Runner 才回收顶层 session。TUI 屏幕只用于人类观察和软性诊断。
-
-## 前端
-
-默认监听 `127.0.0.1:8765`。前端展示所有项目的 Goal、Plan、History、Inbox、Questions、Escalations、Reports、runtime 状态和 Runner 健康，并允许追加人类指令、回复问题、调整时间窗口、暂停、恢复和立即触发项目。
-
-Linux 服务器上的前端可从本地电脑通过 SSH 转发访问：
+前端默认只监听 `127.0.0.1:8765`。从另一台电脑查看远程 Linux 机器上的看板时，使用 SSH 端口转发：
 
 ```bash
 ssh -L 8765:127.0.0.1:8765 <server>
 ```
 
-然后打开 `http://127.0.0.1:8765`。默认不要监听公网地址，也不要引入数据库或云服务。
+然后在本地打开 `http://127.0.0.1:8765`。默认不要把前端直接监听到公网地址。

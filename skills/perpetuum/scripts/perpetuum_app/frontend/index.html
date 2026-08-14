@@ -74,8 +74,8 @@
               <span class="surface-tag business">业务面</span>
               <span class="access-tag readonly">只读</span>
             </div>
-            <span class="card-label">当前 Task</span>
-            <h3 id="current-task">暂无正在执行的 Task</h3>
+            <span class="card-label">当前 Story</span>
+            <h3 id="current-story">暂无正在执行的 Story</h3>
             <p id="last-result" class="work-result">等待项目首次产生结果。</p>
             <div class="card-footnote">最近活动 <span id="last-activity">暂无</span></div>
           </article>
@@ -97,7 +97,7 @@
             </div>
             <span class="card-label">工作安排</span>
             <strong id="window-summary" class="overview-value">未配置</strong>
-            <p class="overview-note">窗口只限制新 Task 开始，不中断已在执行的工作。</p>
+            <p class="overview-note">窗口只限制新 Story 开始，不中断已在执行的工作。</p>
             <button id="jump-to-schedule" class="text-button">调整时间窗口 ↓</button>
           </article>
         </section>
@@ -154,6 +154,18 @@
           </div>
         </section>
 
+        <section class="section-block story-board-section">
+          <div class="section-heading-row">
+            <div>
+              <div class="eyebrow business-text">业务面 · 高频查看</div>
+              <h3>Story 看板</h3>
+              <p>每张卡片代表一个完整、可验证的业务成果。点击卡片查看正文或调整状态、优先级和标签。</p>
+            </div>
+            <span id="archived-story-count" class="frequency-label">暂无归档 Story</span>
+          </div>
+          <div id="story-board" class="story-board" aria-label="Story 看板"></div>
+        </section>
+
         <section class="section-block">
           <div class="section-heading-row">
             <div>
@@ -178,7 +190,7 @@
               <div id="latest-report" class="markdown-view prominent-document"></div>
             </article>
 
-            <div class="business-side">
+            <div class="business-side single-panel">
               <article class="panel compose-panel">
                 <div class="panel-heading compact">
                   <div>
@@ -195,18 +207,6 @@
                 <button id="send-inbox" class="button primary full">写入业务 Inbox</button>
               </article>
 
-              <article class="panel plan-panel">
-                <div class="panel-heading compact">
-                  <div>
-                    <div class="card-kicker">
-                      <span class="surface-tag business">业务面</span>
-                      <span class="access-tag readonly">只读</span>
-                    </div>
-                    <h4>Task 计划</h4>
-                  </div>
-                </div>
-                <div id="task-plan" class="markdown-view compact-document"></div>
-              </article>
             </div>
           </div>
         </section>
@@ -245,7 +245,7 @@
                 </div>
               </div>
               <p class="helper-text">多个窗口用逗号分隔，使用当前配置的时区。</p>
-              <label class="field-label" for="window-text">允许开始新 Task 的时间</label>
+              <label class="field-label" for="window-text">允许开始新 Story 的时间</label>
               <input id="window-text" type="text" placeholder="00:00-06:00, 18:00-24:00">
               <button id="save-windows" class="button control-action full">保存时间窗口</button>
             </article>
@@ -285,6 +285,54 @@
 
       <div id="toast" class="toast"></div>
     </main>
+  </div>
+
+  <div id="story-modal" class="story-modal hidden" role="dialog" aria-modal="true" aria-labelledby="story-modal-title">
+    <div class="story-modal-panel">
+      <div class="story-modal-heading">
+        <div>
+          <code id="story-modal-id"></code>
+          <h3 id="story-modal-title">Story</h3>
+          <p id="story-modal-summary"></p>
+        </div>
+        <button id="story-modal-close" class="icon-button" type="button" aria-label="关闭">×</button>
+      </div>
+
+      <div class="story-editor-grid">
+        <label>
+          <span>状态</span>
+          <select id="story-status-select">
+            <option value="candidate">候选</option>
+            <option value="ready">待开始</option>
+            <option value="in_progress">进行中</option>
+            <option value="waiting">等待</option>
+            <option value="done">已完成</option>
+            <option value="cancelled">归档</option>
+          </select>
+        </label>
+        <label>
+          <span>优先级</span>
+          <select id="story-priority-select">
+            <option value="P0">P0</option>
+            <option value="P1">P1</option>
+            <option value="P2">P2</option>
+            <option value="P3">P3</option>
+          </select>
+        </label>
+        <label class="story-label-editor">
+          <span>标签</span>
+          <input id="story-labels-input" type="text" placeholder="benchmark, data, research">
+        </label>
+      </div>
+
+      <div class="story-modal-meta">最近更新 <span id="story-modal-updated">暂无</span></div>
+      <div id="story-modal-body" class="markdown-view story-modal-body"></div>
+
+      <div class="story-modal-actions">
+        <button id="story-modal-cancel" class="button" type="button">取消</button>
+        <button id="story-modal-save" class="button business-action" type="button">保存卡片信息</button>
+      </div>
+    </div>
   </div>
   <script src="/app.js"></script>
 </body>

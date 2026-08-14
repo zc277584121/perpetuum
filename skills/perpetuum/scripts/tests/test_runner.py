@@ -83,7 +83,7 @@ class RunnerTests(unittest.TestCase):
             for key in (
                 "root_supervisor",
                 "project_supervisor",
-                "task_supervisor",
+                "story_supervisor",
                 "explorer",
                 "executor",
                 "validator",

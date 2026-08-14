@@ -25,6 +25,29 @@ class QuietHandler(BaseHTTPRequestHandler):
 
 
 class CliTests(unittest.TestCase):
+    def test_story_list_outputs_metadata_without_body(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / "home"
+            project = root / "project"
+            project.mkdir()
+            project_id = storage.register_project(home, project)
+            storage.create_story(
+                home,
+                project_id,
+                "首个 Story",
+                "交付一个可验证结果",
+                body="正文中的秘密细节",
+            )
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.story_list(home, project_id, True)
+
+            self.assertEqual(result, 0)
+            self.assertIn("首个 Story", output.getvalue())
+            self.assertNotIn("秘密细节", output.getvalue())
+
     def test_start_reuses_existing_perpetuum_frontend(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory) / "home"

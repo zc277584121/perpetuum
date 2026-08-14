@@ -139,7 +139,7 @@ class Runner:
             "architecture": str(self.skill_root / "references" / "architecture.md"),
             "root_supervisor": str(playbooks_dir / "root-supervisor.md"),
             "project_supervisor": str(playbooks_dir / "project-supervisor.md"),
-            "task_supervisor": str(playbooks_dir / "task-supervisor.md"),
+            "story_supervisor": str(playbooks_dir / "story-supervisor.md"),
             "explorer": str(playbooks_dir / "explorer.md"),
             "executor": str(playbooks_dir / "executor.md"),
             "validator": str(playbooks_dir / "validator.md"),
@@ -375,13 +375,13 @@ class Runner:
             f"\n\n### {title} · {storage.utc_now()}\n\n"
             f"**发生了什么**\n\n{detail}\n\n"
             "**影响**\n\n本次自动工作链路没有获得可信完成结果，"
-            "项目不会把这次运行计为已完成 Task。\n\n"
+            "项目不会把这次运行计为已完成 Story。\n\n"
             "**已尝试的恢复**\n\nRunner 已检查完成回执和顶层 tmux session，"
             "并停止继续假设本次运行成功。\n\n"
-            "**为什么不能自动处理**\n\n继续重试可能重复消耗额度、覆盖现场或制造并行 Task，"
+            "**为什么不能自动处理**\n\n继续重试可能重复消耗额度、覆盖现场或制造并行 Story，"
             "需要先确认底层原因。\n\n"
             f"**人类需要做什么**\n\n{action}\n\n"
-            "**恢复验证**\n\n处理后触发一次项目运行，确认 Root、Project、Task 链路"
+            "**恢复验证**\n\n处理后触发一次项目运行，确认 Root、Project、Story 链路"
             "能够写入完成回执，并在日报中出现可信结果。\n\n"
             f"**原始状态**\n\n- Runner 日志：`{storage.runner_events_path(self.home)}`\n"
             f"- 项目运行日志：`{harness / 'runtime' / 'events.log'}`\n"

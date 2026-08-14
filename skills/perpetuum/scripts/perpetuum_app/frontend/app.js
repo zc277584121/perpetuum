@@ -3,11 +3,11 @@ const state = {
   selectedProjectId: null,
   project: null,
   selectedFile: "goal.md",
+  selectedStory: null,
 };
 
 const documents = {
   "goal.md": {label: "Goal", surface: "业务面", access: "只读"},
-  "plan.md": {label: "Task 计划", surface: "业务面", access: "只读"},
   "history.md": {label: "可信历史", surface: "业务面", access: "只读"},
   "inbox.md": {label: "完整 Inbox", surface: "业务面", access: "只读浏览"},
   "questions.md": {label: "完整 Questions", surface: "业务面", access: "只读浏览"},
@@ -15,6 +15,26 @@ const documents = {
   "reports/latest.md": {label: "最新日报", surface: "业务面", access: "只读"},
   "runtime/events.log": {label: "运行事件", surface: "管控面", access: "只读"},
 };
+
+const storyColumns = [
+  {status: "candidate", label: "候选", description: "方向成立，但范围或验收仍需整理"},
+  {status: "ready", label: "待开始", description: "边界清楚，可以进入执行"},
+  {status: "in_progress", label: "进行中", description: "当前正在推进的 Story"},
+  {status: "waiting", label: "等待", description: "等待人类、管控处理或外部条件"},
+  {status: "done", label: "已完成", description: "已经通过独立验证"},
+];
+
+function storyStatusLabel(value) {
+  const labels = {
+    candidate: "候选",
+    ready: "待开始",
+    in_progress: "进行中",
+    waiting: "等待",
+    done: "已完成",
+    cancelled: "已归档",
+  };
+  return labels[value] || value || "未知";
+}
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -342,6 +362,160 @@ function renderAttention() {
   badge.classList.toggle("has-items", count > 0);
 }
 
+function renderStoryBoard() {
+  const board = document.getElementById("story-board");
+  board.replaceChildren();
+  const stories = Array.isArray(state.project.stories) ? state.project.stories : [];
+  const runtime = state.project.runtime || {};
+
+  for (const columnDefinition of storyColumns) {
+    const column = document.createElement("section");
+    column.className = `story-column story-column-${columnDefinition.status}`;
+
+    const heading = document.createElement("div");
+    heading.className = "story-column-heading";
+    const headingText = document.createElement("div");
+    const title = document.createElement("h4");
+    title.textContent = columnDefinition.label;
+    const description = document.createElement("p");
+    description.textContent = columnDefinition.description;
+    headingText.append(title, description);
+    const columnStories = stories.filter(story => story.status === columnDefinition.status);
+    const count = document.createElement("span");
+    count.className = "story-count";
+    count.textContent = String(columnStories.length);
+    heading.append(headingText, count);
+    column.appendChild(heading);
+
+    const cards = document.createElement("div");
+    cards.className = "story-cards";
+    for (const story of columnStories) {
+      const card = document.createElement("button");
+      card.className = "story-card";
+      card.type = "button";
+      card.dataset.storyId = story.id;
+      if (runtime.current_story === story.id) {
+        card.classList.add("active");
+      }
+
+      const cardTop = document.createElement("div");
+      cardTop.className = "story-card-top";
+      const priority = document.createElement("span");
+      priority.className = `story-priority priority-${String(story.priority).toLowerCase()}`;
+      priority.textContent = story.priority;
+      const storyId = document.createElement("code");
+      storyId.textContent = story.id;
+      cardTop.append(priority, storyId);
+
+      const cardTitle = document.createElement("strong");
+      cardTitle.textContent = story.title;
+      const summary = document.createElement("p");
+      summary.textContent = story.summary;
+
+      const labels = document.createElement("div");
+      labels.className = "story-labels";
+      for (const label of (story.labels || []).slice(0, 4)) {
+        const chip = document.createElement("span");
+        chip.textContent = label;
+        labels.appendChild(chip);
+      }
+
+      const foot = document.createElement("div");
+      foot.className = "story-card-foot";
+      const updated = document.createElement("span");
+      updated.textContent = formatTime(story.updated_at);
+      foot.appendChild(updated);
+      if (runtime.current_story === story.id && runtime.story_phase) {
+        const phase = document.createElement("span");
+        phase.className = "story-phase";
+        phase.textContent = runtime.story_phase;
+        foot.appendChild(phase);
+      } else if (story.waiting_on) {
+        const waiting = document.createElement("span");
+        waiting.className = "story-phase waiting";
+        waiting.textContent = `等待 ${story.waiting_on}`;
+        foot.appendChild(waiting);
+      }
+
+      card.append(cardTop, cardTitle, summary, labels, foot);
+      card.addEventListener("click", () => openStory(story.id));
+      cards.appendChild(card);
+    }
+
+    if (!columnStories.length) {
+      const empty = document.createElement("p");
+      empty.className = "story-column-empty";
+      empty.textContent = "暂无";
+      cards.appendChild(empty);
+    }
+    column.appendChild(cards);
+    board.appendChild(column);
+  }
+
+  const archived = stories.filter(story => story.status === "cancelled").length;
+  document.getElementById("archived-story-count").textContent = archived
+    ? `${archived} 个已归档 Story`
+    : "暂无归档 Story";
+}
+
+async function openStory(storyId) {
+  if (!state.selectedProjectId) {
+    return;
+  }
+  try {
+    const story = await request(
+      `/api/projects/${encodeURIComponent(state.selectedProjectId)}/stories/${encodeURIComponent(storyId)}`,
+    );
+    state.selectedStory = story;
+    const metadata = story.metadata;
+    document.getElementById("story-modal-id").textContent = metadata.id;
+    document.getElementById("story-modal-title").textContent = metadata.title;
+    document.getElementById("story-modal-summary").textContent = metadata.summary;
+    document.getElementById("story-status-select").value = metadata.status;
+    document.getElementById("story-priority-select").value = metadata.priority;
+    document.getElementById("story-labels-input").value = (metadata.labels || []).join(", ");
+    document.getElementById("story-modal-updated").textContent = formatTime(metadata.updated_at);
+    renderMarkdown(document.getElementById("story-modal-body"), story.body, "Story 正文为空。");
+    document.getElementById("story-modal").classList.remove("hidden");
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function closeStoryModal() {
+  state.selectedStory = null;
+  document.getElementById("story-modal").classList.add("hidden");
+}
+
+async function saveStoryMetadata() {
+  if (!state.selectedStory || !state.selectedProjectId) {
+    return;
+  }
+  const storyId = state.selectedStory.metadata.id;
+  const labels = document.getElementById("story-labels-input").value
+    .split(",")
+    .map(value => value.trim())
+    .filter(Boolean);
+  try {
+    await request(
+      `/api/projects/${encodeURIComponent(state.selectedProjectId)}/stories/${encodeURIComponent(storyId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          status: document.getElementById("story-status-select").value,
+          priority: document.getElementById("story-priority-select").value,
+          labels,
+        }),
+      },
+    );
+    closeStoryModal();
+    await loadStatus();
+    showToast("Story 元数据已更新");
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
 function renderDocumentBrowser() {
   const tabs = document.getElementById("document-tabs");
   tabs.replaceChildren();
@@ -402,12 +576,17 @@ function renderProject() {
   pauseButton.textContent = summary.paused ? "恢复项目" : "暂停项目";
   pauseButton.dataset.action = summary.paused ? "resume" : "pause";
 
-  document.getElementById("current-task").textContent = summary.current_task || "暂无正在执行的 Task";
+  const currentStory = (state.project.stories || []).find(
+    story => story.id === summary.current_story,
+  );
+  document.getElementById("current-story").textContent = currentStory
+    ? currentStory.title
+    : "暂无正在执行的 Story";
   document.getElementById("last-result").textContent = summary.last_result || "尚未产生工作结果。";
   document.getElementById("last-activity").textContent = formatTime(summary.last_activity_at);
   document.getElementById("project-status").textContent = statusLabel(displayStatus);
   document.getElementById("runtime-summary").textContent = summary.paused
-    ? "项目已暂停，不会开始新的 Task。"
+    ? "项目已暂停，不会开始新的 Story。"
     : `${runtime.active_sessions?.length || 0} 个已登记活动会话`;
   document.getElementById("window-summary").textContent = (summary.windows || []).join("，") || "未配置";
 
@@ -417,17 +596,12 @@ function renderProject() {
   }
 
   renderAttention();
+  renderStoryBoard();
   renderMarkdown(
     document.getElementById("latest-report"),
     withoutTopHeading(state.project.files["reports/latest.md"]),
     "尚未生成日报。",
   );
-  renderMarkdown(
-    document.getElementById("task-plan"),
-    withoutTopHeading(state.project.files["plan.md"]),
-    "尚未建立 Task 计划。",
-  );
-
   replaceDefinitions(document.getElementById("health-details"), [
     ["Runner", service.alive ? "运行中" : "已停止"],
     ["Root Supervisor", runner.active_root ? "活跃" : "空闲"],
@@ -445,6 +619,8 @@ function renderProject() {
     ["启动方式", "Runner 统一管理"],
     ["已登记会话", sessionSummary],
     ["项目状态", statusLabel(displayStatus)],
+    ["当前 Story", currentStory ? currentStory.id : "无"],
+    ["Story 阶段", runtime.story_phase || "无"],
     ["最近活动", formatTime(summary.last_activity_at)],
   ]);
 
@@ -546,6 +722,20 @@ document.getElementById("save-windows").addEventListener("click", async () => {
 document.getElementById("jump-to-schedule").addEventListener("click", () => {
   document.getElementById("control-center").scrollIntoView({behavior: "smooth", block: "start"});
   window.setTimeout(() => document.getElementById("window-text").focus(), 420);
+});
+
+document.getElementById("story-modal-close").addEventListener("click", closeStoryModal);
+document.getElementById("story-modal-cancel").addEventListener("click", closeStoryModal);
+document.getElementById("story-modal-save").addEventListener("click", saveStoryMetadata);
+document.getElementById("story-modal").addEventListener("click", event => {
+  if (event.target.id === "story-modal") {
+    closeStoryModal();
+  }
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    closeStoryModal();
+  }
 });
 
 loadStatus(false);

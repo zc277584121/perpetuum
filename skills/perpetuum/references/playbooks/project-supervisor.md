@@ -1,38 +1,45 @@
 # Project Supervisor Playbook
 
-Project Supervisor 管理一个项目的业务入口和管控状态，不直接替代 Explorer、Executor 或 Validator。本 Playbook 提供判断和提示框架，不要求使用固定措辞。
+Project Supervisor 管理一个项目的业务入口和管控状态，不直接替代 Executor、Validator 或 Explorer。当前一个项目同时最多执行一个 Story。
 
 ## 每次启动
 
-1. 读取 `project.yaml`、`goal.md`、`plan.md`、`history.md`、`inbox.md`、`questions.md`、`escalations.md` 和 `runtime/state.json`。
-2. 吸收尚未处理的人类指令与回复，并记录它们怎样改变优先级、资源或边界。
-3. 检查项目目录、关键依赖、外部事件和当前资源，判断现在是否真的值得开始业务工作。Runner 只判断当前是否允许开始新 Task。
-4. 若可信状态表明已有 Task 正在执行，优先恢复、观察或记录异常，不启动第二个 Task。`active_sessions` 和全局 session 列表都不是所有权证明；列表为空不能把其他 session 判定为残留。
+1. 读取 `project.yaml`、`goal.md`、`history.md`、`inbox.md`、`questions.md`、`escalations.md` 和 `runtime/state.json`。
+2. 吸收尚未处理的人类指令与回复，并记录它们怎样改变 Story、优先级、资源或边界。
+3. 使用 Perpetuum Story 接口只读取全部 Story front matter；不要一开始打开所有正文。
+4. 若状态和自己保存的所有权记录证明已有 Story Supervisor 正在运行，优先恢复、观察或记录异常，不启动第二个 Story。全局 session 列表和 `active_sessions` 不能证明所有权。
 
-## 启动 Task
+## 选择 Story
 
-只有项目值得推进且没有正在运行的 Task 时，才通过 `cc-use` 创建唯一的 Task Supervisor session。每个新的 Task 工作循环使用新的 Task Supervisor session。
+没有 Story 正在运行时：
 
-### 给 Task Supervisor 的 Prompt 框架
+1. 有 `in_progress` Story 时优先恢复，并读取其完整正文；
+2. 否则从 `ready` Story 中先按优先级筛选，再根据 Goal、最近结果、人类输入、资源和依赖读取少量候选正文，选择一张当前最值得执行的 Story；
+3. `candidate`、`waiting`、`done` 和 `cancelled` 不直接开始；
+4. 没有 `in_progress` 或 `ready` Story 时，单独创建一次 Explorer session刷新看板，再重新读取元数据；
+5. Explorer 仍未产生可运行 Story 时，项目正常 Idle。
 
-根据本次项目状态组织 Prompt，至少说明：
+Project Supervisor 做轻量调度判断，不重复 Explorer 的全面研究，也不机械选择“最新创建”的卡片。
 
-- 项目真实目录和 Harness 绝对路径；
-- 当前承载 Task Supervisor 的 session 精确名称，并说明该 session 由 Project Supervisor 管理，不得由它关闭、接管或发送消息；
-- 长期 Goal、当前 Plan、可信 History 和尚未处理的人类输入；
-- 本次为何允许并值得开始一次工作循环；
-- 当前资源、边界、已知异常和不可触碰的底线；
-- 需要读取的 Task Supervisor Playbook；
-- 本次最多选择并完成一个 Task；
-- 需要返回 Task、结果、证据、状态和仍需处理的问题；
-- 结束前只关闭本次由自己明确创建并保存名称的 Explorer、Executor 和 Validator session。
+## 启动 Story
 
-不要发送与当前项目证据无关的固定“继续”Prompt。只有 Task Supervisor 返回实际结果、需要澄清、人类补充决定或外部条件变化时，才发送后续 Prompt。
+为选中的 Story 创建唯一 Story Supervisor session，并在首次 Prompt 中至少说明：
 
-## Idle 与阻塞
+- 项目真实目录、Harness 绝对路径和 Story 文件绝对路径；
+- Story ID、标题、摘要和为什么本次选择它；
+- 当前承载 Story Supervisor 的 session 精确名称及上级所有权；
+- 长期 Goal、可信 History、已处理的人类输入和当前资源；
+- 需要读取的 Story Supervisor Playbook；
+- 本次只服务这一张 Story；
+- 需要返回最终状态、证据、Questions、Escalations 和 Explorer 对后续看板的调整；
+- 结束前只关闭自己明确创建并保存名称的 Executor、Validator 和 Explorer session。
 
-`plan.md` 中明确存在仍未完成、未取消且未被新证据覆盖的 Task 时，项目仍有待办；外部 Issue 或 PR 没有增量更新，不能单独成为 Idle 的理由。没有可执行待办、项目阶段性目标已满足或剩余工作全部等待外部条件时，可以正常进入 Idle。需要业务选择时写入 `questions.md`；环境、权限、认证、进程、配额或基础设施问题写入 `escalations.md`。
+不要在 Story 开始前固定调用 Explorer，也不要发送与当前证据无关的“继续”Prompt。只有 Story Supervisor 返回实际结果、请求澄清、人类补充决定或外部条件实质变化时才继续对话。
+
+## 人类回答与恢复
+
+吸收 `questions.md` 或 `escalations.md` 的人类回复后，定位关联 Story，把决定写入 Story 正文。条件已经满足时将 `waiting` 改为 `ready`，清理当前等待字段并保留问题 ID 作为历史关联。恢复仍是同一个 Story，但使用新的 Story Supervisor、Executor 和 Validator session。
 
 ## 结束时
 
-关闭并复核本次明确创建且保存了精确名称的直属 Task Supervisor session，更新 `runtime/state.json` 和 `runtime/events.log`，再向 Root 返回本次结果。不要根据全局列表清理来源不明的 session。无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。
+关闭并复核本次明确创建且保存了精确名称的直属 Story Supervisor 或兜底 Explorer session，更新 `runtime/state.json` 和 `runtime/events.log`，再向 Root 返回结果。不要根据全局列表清理来源不明的 session。无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。

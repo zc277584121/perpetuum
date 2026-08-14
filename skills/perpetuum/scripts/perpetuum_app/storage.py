@@ -9,7 +9,38 @@ import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+import yaml
+
+
+STORY_STATUSES = (
+    "candidate",
+    "ready",
+    "in_progress",
+    "waiting",
+    "done",
+    "cancelled",
+)
+STORY_STATUS_ORDER = {
+    "in_progress": 0,
+    "ready": 1,
+    "candidate": 2,
+    "waiting": 3,
+    "done": 4,
+    "cancelled": 5,
+}
+STORY_PRIORITIES = ("P0", "P1", "P2", "P3")
+STORY_PRIORITY_ORDER = {value: index for index, value in enumerate(STORY_PRIORITIES)}
+STORY_MUTABLE_FIELDS = {
+    "title",
+    "summary",
+    "status",
+    "priority",
+    "labels",
+    "waiting_on",
+    "question_ids",
+}
 
 
 DEFAULT_ACTIVATION = {
@@ -70,6 +101,21 @@ def project_dir(home: Path, project_id: str) -> Path:
     return projects_dir(home) / project_id
 
 
+def stories_dir(home: Path, project_id: str) -> Path:
+    return project_dir(home, project_id) / "stories"
+
+
+def validate_story_id(story_id: str) -> str:
+    value = str(story_id).strip()
+    if not re.fullmatch(r"S-[A-Za-z0-9][A-Za-z0-9_-]*", value):
+        raise ValueError("Story ID 必须以 S- 开头，并且只能包含字母、数字、下划线和连字符")
+    return value
+
+
+def story_path(home: Path, project_id: str, story_id: str) -> Path:
+    return stories_dir(home, project_id) / f"{validate_story_id(story_id)}.md"
+
+
 def read_json(path: Path, default: Any = None) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -95,6 +141,224 @@ def atomic_write_text(path: Path, content: str) -> None:
             os.unlink(temporary_name)
         except FileNotFoundError:
             pass
+
+
+def parse_front_matter(content: str) -> Tuple[Dict[str, Any], str]:
+    normalized = content.replace("\r\n", "\n")
+    lines = normalized.split("\n")
+    if not lines or lines[0].strip() != "---":
+        raise ValueError("Story 文件必须以 YAML front matter 开始")
+    try:
+        end = next(index for index in range(1, len(lines)) if lines[index].strip() == "---")
+    except StopIteration as exc:
+        raise ValueError("Story 文件缺少 front matter 结束分隔符") from exc
+    try:
+        metadata = yaml.safe_load("\n".join(lines[1:end])) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Story front matter 无法解析：{exc}") from exc
+    if not isinstance(metadata, dict):
+        raise ValueError("Story front matter 必须是 YAML 对象")
+    body = "\n".join(lines[end + 1 :]).lstrip("\n")
+    return metadata, body
+
+
+def dump_front_matter(metadata: Dict[str, Any], body: str) -> str:
+    header = yaml.safe_dump(
+        metadata,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+        width=1000,
+    ).strip()
+    normalized_body = body.strip()
+    suffix = f"\n\n{normalized_body}\n" if normalized_body else "\n"
+    return f"---\n{header}\n---{suffix}"
+
+
+def normalize_story_metadata(
+    metadata: Dict[str, Any],
+    expected_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    value = dict(metadata)
+    story_id = validate_story_id(value.get("id", expected_id or ""))
+    if expected_id and story_id != validate_story_id(expected_id):
+        raise ValueError("Story 文件名与 front matter 中的 ID 不一致")
+    title = str(value.get("title", "")).strip()
+    summary = str(value.get("summary", "")).strip()
+    if not title:
+        raise ValueError("Story title 不能为空")
+    if not summary:
+        raise ValueError("Story summary 不能为空")
+    status = str(value.get("status", "ready")).strip()
+    if status not in STORY_STATUSES:
+        raise ValueError(f"Story status 必须是：{', '.join(STORY_STATUSES)}")
+    priority = str(value.get("priority", "P1")).strip().upper()
+    if priority not in STORY_PRIORITIES:
+        raise ValueError(f"Story priority 必须是：{', '.join(STORY_PRIORITIES)}")
+    labels_value = value.get("labels", [])
+    if labels_value is None:
+        labels_value = []
+    if not isinstance(labels_value, list):
+        raise ValueError("Story labels 必须是列表")
+    labels = []
+    for item in labels_value:
+        label = str(item).strip()
+        if label and label not in labels:
+            labels.append(label)
+    now = utc_now()
+    normalized = dict(value)
+    normalized.update(
+        {
+            "id": story_id,
+            "title": title,
+            "summary": summary,
+            "status": status,
+            "priority": priority,
+            "labels": labels,
+            "created_at": str(value.get("created_at") or now),
+            "updated_at": str(value.get("updated_at") or now),
+        }
+    )
+    waiting_on = normalized.get("waiting_on")
+    if waiting_on is not None:
+        waiting_on = str(waiting_on).strip()
+        if waiting_on not in {"human", "control", "external"}:
+            raise ValueError("waiting_on 必须是 human、control 或 external")
+        normalized["waiting_on"] = waiting_on
+    question_ids = normalized.get("question_ids")
+    if question_ids is not None:
+        if not isinstance(question_ids, list):
+            raise ValueError("question_ids 必须是列表")
+        normalized["question_ids"] = [str(item).strip() for item in question_ids if str(item).strip()]
+    return normalized
+
+
+def story_body_template() -> str:
+    return (
+        "# 背景与价值\n\n"
+        "说明这个 Story 与长期 Goal 的关系。\n\n"
+        "# 预期成果\n\n"
+        "说明完成后会得到什么可复查结果。\n\n"
+        "# 范围与边界\n\n"
+        "说明本次包含和明确排除的内容。\n\n"
+        "# 验收标准\n\n"
+        "说明 Validator 根据哪些证据判断完成。\n\n"
+        "# 当前进展\n\n"
+        "尚未开始。\n\n"
+        "# 证据\n\n"
+        "暂无。\n\n"
+        "# 重要决定\n\n"
+        "暂无。\n\n"
+        "# 恢复上下文\n\n"
+        "尚无需要恢复的上下文。"
+    )
+
+
+def next_story_id(home: Path, project_id: str) -> str:
+    prefix = datetime.now(timezone.utc).strftime("S-%Y%m%d-")
+    highest = 0
+    directory = stories_dir(home, project_id)
+    if directory.is_dir():
+        for path in directory.glob(f"{prefix}*.md"):
+            match = re.fullmatch(rf"{re.escape(prefix)}(\d+)", path.stem)
+            if match:
+                highest = max(highest, int(match.group(1)))
+    return f"{prefix}{highest + 1:03d}"
+
+
+def create_story(
+    home: Path,
+    project_id: str,
+    title: str,
+    summary: str,
+    *,
+    story_id: Optional[str] = None,
+    status: str = "ready",
+    priority: str = "P1",
+    labels: Optional[List[str]] = None,
+    body: Optional[str] = None,
+) -> Dict[str, Any]:
+    if load_project(home, project_id) is None:
+        raise ValueError(f"未知项目：{project_id}")
+    selected_id = validate_story_id(story_id) if story_id else next_story_id(home, project_id)
+    path = story_path(home, project_id, selected_id)
+    if path.exists():
+        raise ValueError(f"Story 已存在：{selected_id}")
+    now = utc_now()
+    metadata = normalize_story_metadata(
+        {
+            "id": selected_id,
+            "title": title,
+            "summary": summary,
+            "status": status,
+            "priority": priority,
+            "labels": labels or [],
+            "created_at": now,
+            "updated_at": now,
+        },
+        selected_id,
+    )
+    selected_body = story_body_template() if body is None else body
+    atomic_write_text(path, dump_front_matter(metadata, selected_body))
+    return {"metadata": metadata, "body": selected_body, "path": str(path)}
+
+
+def load_story(home: Path, project_id: str, story_id: str) -> Dict[str, Any]:
+    selected_id = validate_story_id(story_id)
+    path = story_path(home, project_id, selected_id)
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise ValueError(f"Story 不存在：{selected_id}") from exc
+    metadata, body = parse_front_matter(content)
+    metadata = normalize_story_metadata(metadata, selected_id)
+    return {"metadata": metadata, "body": body, "path": str(path)}
+
+
+def list_stories(home: Path, project_id: str) -> List[Dict[str, Any]]:
+    if load_project(home, project_id) is None:
+        raise ValueError(f"未知项目：{project_id}")
+    directory = stories_dir(home, project_id)
+    if not directory.is_dir():
+        return []
+    stories = []
+    for path in sorted(directory.glob("S-*.md")):
+        metadata, _body = parse_front_matter(path.read_text(encoding="utf-8"))
+        normalized = normalize_story_metadata(metadata, path.stem)
+        normalized["path"] = str(path)
+        stories.append(normalized)
+    stories.sort(
+        key=lambda item: (
+            STORY_STATUS_ORDER.get(str(item.get("status")), 99),
+            STORY_PRIORITY_ORDER.get(str(item.get("priority")), 99),
+            str(item.get("id", "")),
+        )
+    )
+    return stories
+
+
+def update_story(
+    home: Path,
+    project_id: str,
+    story_id: str,
+    changes: Dict[str, Any],
+    *,
+    body: Optional[str] = None,
+) -> Dict[str, Any]:
+    story = load_story(home, project_id, story_id)
+    metadata = dict(story["metadata"])
+    unknown = set(changes) - STORY_MUTABLE_FIELDS
+    if unknown:
+        raise ValueError(f"不允许更新 Story 字段：{', '.join(sorted(unknown))}")
+    metadata.update(changes)
+    if metadata.get("status") != "waiting":
+        metadata.pop("waiting_on", None)
+    metadata["updated_at"] = utc_now()
+    metadata = normalize_story_metadata(metadata, story_id)
+    selected_body = story["body"] if body is None else body
+    path = story_path(home, project_id, story_id)
+    atomic_write_text(path, dump_front_matter(metadata, selected_body))
+    return {"metadata": metadata, "body": selected_body, "path": str(path)}
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -225,6 +489,7 @@ def register_project(
     harness.mkdir(parents=True, exist_ok=True)
     (harness / "reports").mkdir(exist_ok=True)
     (harness / "runtime").mkdir(exist_ok=True)
+    (harness / "stories").mkdir(exist_ok=True)
 
     display_name = name or resolved.name
     project_config_path = harness / "project.yaml"
@@ -262,9 +527,10 @@ def register_project(
         write_json(
             runtime_state,
             {
-                "version": 1,
+                "version": 2,
                 "status": "idle",
-                "current_task": None,
+                "current_story": None,
+                "story_phase": None,
                 "active_sessions": [],
                 "last_activity_at": utc_now(),
                 "last_result": "项目已注册，等待首次激活。",
@@ -309,18 +575,9 @@ def project_templates(name: str, path: Path) -> Dict[str, str]:
             "## 进展证据\n\n"
             "- 请说明哪些测试、实验、产物或指标可以证明真实进展。\n"
         ),
-        "plan.md": (
-            "# Task 计划\n\n"
-            "## 当前 Task\n\n"
-            "暂无。\n\n"
-            "## 候选 Task\n\n"
-            "等待 Explorer 根据 Goal 和项目证据建立。\n\n"
-            "## 暂不处理\n\n"
-            "暂无。\n"
-        ),
         "history.md": (
             "# 可信历史\n\n"
-            "只记录已完成 Task 的精简结论、证据和重要决定；"
+            "只记录已验证 Story 的精简结论、证据和重要决定；"
             "不记录每次轮询或每轮对话。\n"
         ),
         "inbox.md": (

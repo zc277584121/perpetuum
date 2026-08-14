@@ -17,6 +17,15 @@ class ServerTests(unittest.TestCase):
             project = root / "project"
             project.mkdir()
             project_id = storage.register_project(home, project, name="测试项目")
+            story = storage.create_story(
+                home,
+                project_id,
+                "完成首个结果",
+                "交付可以独立验证的成果",
+                priority="P0",
+                labels=["research"],
+            )
+            story_id = story["metadata"]["id"]
 
             server = RuntimeServer(home, "127.0.0.1", 0)
             port = server.server.server_address[1]
@@ -31,6 +40,29 @@ class ServerTests(unittest.TestCase):
                 ) as response:
                     detail = json.loads(response.read())
                 self.assertIn("goal.md", detail["files"])
+                self.assertNotIn("plan.md", detail["files"])
+                self.assertEqual(detail["stories"][0]["id"], story_id)
+
+                with urlopen(
+                    f"http://127.0.0.1:{port}/api/projects/{project_id}/stories/{story_id}"
+                ) as response:
+                    story_detail = json.loads(response.read())
+                self.assertEqual(story_detail["metadata"]["priority"], "P0")
+                self.assertIn("验收标准", story_detail["body"])
+
+                request = Request(
+                    f"http://127.0.0.1:{port}/api/projects/{project_id}/stories/{story_id}",
+                    data=json.dumps(
+                        {"status": "waiting", "priority": "P1", "labels": ["human"]}
+                    ).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(request) as response:
+                    result = json.loads(response.read())
+                self.assertTrue(result["ok"])
+                updated = storage.load_story(home, project_id, story_id)
+                self.assertEqual(updated["metadata"]["status"], "waiting")
 
                 request = Request(
                     f"http://127.0.0.1:{port}/api/projects/{project_id}/inbox",
