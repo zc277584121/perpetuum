@@ -42,6 +42,7 @@
           <div class="project-subline">
             <span id="project-path"></span>
             <span id="project-updated"></span>
+            <span id="project-next-run" class="project-next-run"></span>
           </div>
         </div>
 
@@ -156,14 +157,73 @@
           <div class="section-title-row">
             <div>
               <span class="section-kicker control">运行安排</span>
-              <h4>Cron 计划</h4>
+              <h4>运行计划</h4>
             </div>
           </div>
-          <p class="helper-text">每行一个标准五字段 cron。计划只触发新的 Project Supervisor，不中断已经在运行的 Story。</p>
+          <div class="schedule-overview">
+            <strong id="schedule-description">正在读取运行计划……</strong>
+            <span id="schedule-next-run">正在计算下次启动时间……</span>
+          </div>
+
+          <div class="schedule-mode-switch" role="tablist" aria-label="运行计划编辑方式">
+            <button class="selected" type="button" data-schedule-mode="simple">易读设置</button>
+            <button type="button" data-schedule-mode="cron">Cron 表达式</button>
+          </div>
+
           <label for="schedule-timezone">时区</label>
-          <input id="schedule-timezone" type="text" placeholder="Asia/Shanghai">
-          <label for="cron-text">启动时间</label>
-          <textarea id="cron-text" rows="5" placeholder="*/5 0-5 * * *"></textarea>
+          <input id="schedule-timezone" type="text" list="timezone-options" placeholder="Asia/Shanghai">
+          <datalist id="timezone-options">
+            <option value="Asia/Shanghai"></option>
+            <option value="UTC"></option>
+            <option value="America/Los_Angeles"></option>
+            <option value="America/New_York"></option>
+            <option value="Europe/London"></option>
+          </datalist>
+
+          <div id="schedule-simple-panel" class="schedule-editor-panel">
+            <p id="simple-mode-note" class="helper-text hidden"></p>
+            <label for="simple-kind">运行方式</label>
+            <select id="simple-kind">
+              <option value="window">每天在时间窗口内循环</option>
+              <option value="fixed">每天固定时间启动一次</option>
+            </select>
+
+            <div id="simple-fixed-fields" class="schedule-fields hidden">
+              <label>
+                <span>启动时间</span>
+                <input id="simple-fixed-time" type="time" step="300" value="00:00">
+              </label>
+            </div>
+
+            <div id="simple-window-fields" class="schedule-fields three-fields">
+              <label>
+                <span>开始时间</span>
+                <input id="simple-start-time" type="time" step="300" value="00:00">
+              </label>
+              <label>
+                <span>结束时间</span>
+                <input id="simple-end-time" type="time" step="300" value="06:00">
+              </label>
+              <label>
+                <span>启动间隔</span>
+                <select id="simple-interval">
+                  <option value="5">每 5 分钟</option>
+                  <option value="10">每 10 分钟</option>
+                  <option value="15">每 15 分钟</option>
+                  <option value="20">每 20 分钟</option>
+                  <option value="30">每 30 分钟</option>
+                  <option value="60">每 60 分钟</option>
+                </select>
+              </label>
+            </div>
+            <p class="helper-text">结束时间不包含在运行窗口内；跨过午夜时会自动按“次日”理解。</p>
+          </div>
+
+          <div id="schedule-cron-panel" class="schedule-editor-panel hidden">
+            <label for="cron-text">Cron 表达式</label>
+            <textarea id="cron-text" rows="5" placeholder="*/5 0-5 * * *"></textarea>
+            <p class="helper-text">每行一个标准五字段 Cron。适合工作日、指定月份等更复杂的计划。</p>
+          </div>
           <button id="save-schedule" class="button control-button full" type="button">保存运行计划</button>
         </article>
 

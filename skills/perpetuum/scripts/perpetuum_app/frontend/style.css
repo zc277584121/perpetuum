@@ -211,6 +211,26 @@ select:focus {
   white-space: nowrap;
 }
 
+.project-next-run-line,
+.project-schedule-line {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-next-run-line {
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 680;
+}
+
+.project-schedule-line {
+  color: var(--quiet);
+  font-size: 9px;
+}
+
 .project-state {
   align-self: center;
   color: var(--green);
@@ -368,6 +388,11 @@ select:focus {
 
 .project-subline span:first-child {
   max-width: min(54vw, 720px);
+}
+
+.project-subline .project-next-run {
+  color: var(--green);
+  font-weight: 700;
 }
 
 .project-actions {
@@ -880,6 +905,78 @@ select:focus {
   margin: 9px 0 10px;
 }
 
+.schedule-overview {
+  display: grid;
+  gap: 5px;
+  margin: 14px 0;
+  padding: 13px 14px;
+  border: 1px solid rgba(86, 72, 129, 0.16);
+  border-radius: 12px;
+  background: var(--purple-soft);
+}
+
+.schedule-overview strong {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.schedule-overview span {
+  color: var(--purple);
+  font-size: 10px;
+  font-weight: 680;
+}
+
+.schedule-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 4px;
+  border-radius: 11px;
+  background: #eceee9;
+}
+
+.schedule-mode-switch button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.schedule-mode-switch button.selected {
+  background: white;
+  color: var(--ink);
+  box-shadow: 0 3px 10px rgba(23, 32, 29, 0.08);
+}
+
+.schedule-editor-panel {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 14px;
+  padding-top: 2px;
+}
+
+.schedule-editor-panel > label,
+.schedule-fields label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.schedule-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.schedule-fields.three-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .detail-list {
   margin: 14px 0 0;
 }
@@ -1184,6 +1281,10 @@ select:focus {
     align-items: flex-start;
     flex-direction: column;
     gap: 3px;
+  }
+
+  .schedule-fields.three-fields {
+    grid-template-columns: 1fr;
   }
 
   .project-actions {

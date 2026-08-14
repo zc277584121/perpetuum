@@ -5,6 +5,9 @@ const state = {
   documents: {},
   selectedDocument: "goal",
   selectedStory: null,
+  scheduleMode: "simple",
+  scheduleEditorProjectId: null,
+  scheduleDirty: false,
 };
 
 const storyColumns = [
@@ -86,7 +89,7 @@ function waitingLabel(value) {
   return labels[value] || "等待中";
 }
 
-function formatTime(value) {
+function formatTime(value, timezoneOverride = null) {
   if (!value) {
     return "暂无";
   }
@@ -94,7 +97,7 @@ function formatTime(value) {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  const timezone = state.status?.activation?.timezone || "Asia/Shanghai";
+  const timezone = timezoneOverride || state.status?.activation?.timezone || "Asia/Shanghai";
   try {
     return new Intl.DateTimeFormat("zh-CN", {
       timeZone: timezone,
@@ -107,6 +110,63 @@ function formatTime(value) {
   } catch (_error) {
     return date.toLocaleString("zh-CN");
   }
+}
+
+function scheduleDescription(project) {
+  return project.schedule_view?.description || "尚未配置运行计划";
+}
+
+function nextRunText(project) {
+  const schedule = project.schedule || {};
+  const view = project.schedule_view || {};
+  const nextTime = view.next_run_at
+    ? formatTime(view.next_run_at, schedule.timezone)
+    : null;
+  if (project.project_session) {
+    return nextTime ? `当前正在运行 · 下一计划 ${nextTime}` : "当前正在运行";
+  }
+  if (project.paused || schedule.paused) {
+    return "运行计划已暂停";
+  }
+  if (project.enabled === false || schedule.enabled === false) {
+    return "运行计划未启用";
+  }
+  if (schedule.force_run) {
+    return "已请求立即运行";
+  }
+  return nextTime ? `预计下次启动 ${nextTime}` : "暂无下一次启动";
+}
+
+function simpleScheduleFromForm() {
+  const kind = document.getElementById("simple-kind").value;
+  if (kind === "fixed") {
+    return {
+      kind,
+      time: document.getElementById("simple-fixed-time").value,
+    };
+  }
+  return {
+    kind: "window",
+    start: document.getElementById("simple-start-time").value,
+    end: document.getElementById("simple-end-time").value,
+    interval_minutes: Number(document.getElementById("simple-interval").value),
+  };
+}
+
+function describeSimpleSchedule(schedule) {
+  if (schedule.kind === "fixed") {
+    return schedule.time ? `每天 ${schedule.time} 启动` : "请选择启动时间";
+  }
+  if (!schedule.start || !schedule.end || !schedule.interval_minutes) {
+    return "请完整设置运行窗口";
+  }
+  let windowText = `每天 ${schedule.start}–${schedule.end}`;
+  if (schedule.start === schedule.end) {
+    windowText = `每天全天（从 ${schedule.start} 起）`;
+  } else if (schedule.end < schedule.start) {
+    windowText = `每天 ${schedule.start}–次日 ${schedule.end}`;
+  }
+  return `${windowText}，每 ${schedule.interval_minutes} 分钟启动`;
 }
 
 function definition(term, description) {
@@ -314,9 +374,14 @@ function renderProjects() {
     const status = document.createElement("span");
     status.className = `project-state state-${displayStatus}`;
     status.textContent = statusLabel(displayStatus);
-    const path = document.createElement("small");
-    path.textContent = project.path;
-    button.append(title, status, path);
+    const nextRun = document.createElement("span");
+    nextRun.className = "project-next-run-line";
+    nextRun.textContent = nextRunText(project);
+    const schedule = document.createElement("small");
+    schedule.className = "project-schedule-line";
+    schedule.textContent = scheduleDescription(project);
+    button.title = project.path;
+    button.append(title, status, nextRun, schedule);
     button.addEventListener("click", () => selectProject(project.id));
     list.appendChild(button);
   }
@@ -440,6 +505,62 @@ function renderArchive() {
   }
 }
 
+function renderScheduleMode() {
+  const simpleMode = state.scheduleMode === "simple";
+  document.getElementById("schedule-simple-panel").classList.toggle("hidden", !simpleMode);
+  document.getElementById("schedule-cron-panel").classList.toggle("hidden", simpleMode);
+  for (const button of document.querySelectorAll("[data-schedule-mode]")) {
+    button.classList.toggle("selected", button.dataset.scheduleMode === state.scheduleMode);
+  }
+}
+
+function renderSimpleFields() {
+  const fixed = document.getElementById("simple-kind").value === "fixed";
+  document.getElementById("simple-fixed-fields").classList.toggle("hidden", !fixed);
+  document.getElementById("simple-window-fields").classList.toggle("hidden", fixed);
+}
+
+function populateSimpleSchedule(simple) {
+  if (!simple) {
+    return;
+  }
+  document.getElementById("simple-kind").value = simple.kind;
+  if (simple.kind === "fixed") {
+    document.getElementById("simple-fixed-time").value = simple.time || "00:00";
+  } else {
+    document.getElementById("simple-start-time").value = simple.start || "00:00";
+    document.getElementById("simple-end-time").value = simple.end || "06:00";
+    document.getElementById("simple-interval").value = String(simple.interval_minutes || 30);
+  }
+  renderSimpleFields();
+}
+
+function renderScheduleSettings(summary) {
+  const schedule = summary.schedule || {};
+  const view = summary.schedule_view || {};
+  const simple = view.simple || null;
+  const cronInput = document.getElementById("cron-text");
+  const timezoneInput = document.getElementById("schedule-timezone");
+
+  if (!state.scheduleDirty) {
+    cronInput.value = (schedule.cron || []).join("\n");
+    timezoneInput.value = schedule.timezone || "Asia/Shanghai";
+    populateSimpleSchedule(simple);
+  }
+
+  document.getElementById("schedule-description").textContent = state.scheduleDirty && state.scheduleMode === "simple"
+    ? `将保存为：${describeSimpleSchedule(simpleScheduleFromForm())}`
+    : scheduleDescription(summary);
+  document.getElementById("schedule-next-run").textContent = nextRunText(summary);
+  const note = document.getElementById("simple-mode-note");
+  note.textContent = simple
+    ? "易读设置与当前 Cron 表达的是同一份计划。"
+    : "当前计划较复杂，无法自动还原成易读设置；在这里保存会用新的易读计划替换它。";
+  note.classList.toggle("hidden", Boolean(simple));
+  renderScheduleMode();
+  renderSimpleFields();
+}
+
 function renderProject() {
   if (!state.project) {
     return;
@@ -455,6 +576,7 @@ function renderProject() {
   document.getElementById("project-name").textContent = summary.name;
   document.getElementById("project-path").textContent = summary.path;
   document.getElementById("project-updated").textContent = `更新于 ${formatTime(summary.last_activity_at)}`;
+  document.getElementById("project-next-run").textContent = nextRunText(summary);
 
   const stateChip = document.getElementById("project-state-chip");
   stateChip.textContent = statusLabel(displayStatus);
@@ -478,16 +600,7 @@ function renderProject() {
     document.getElementById("board-status-line").textContent = summary.last_result || "当前没有运行中的 Story。";
   }
 
-  const schedule = summary.schedule || {};
-  const cronInput = document.getElementById("cron-text");
-  const timezoneInput = document.getElementById("schedule-timezone");
-  if (document.activeElement !== cronInput) {
-    cronInput.value = (schedule.cron || []).join("\n");
-  }
-  if (document.activeElement !== timezoneInput) {
-    timezoneInput.value = schedule.timezone || "Asia/Shanghai";
-  }
-
+  renderScheduleSettings(summary);
   renderStoryBoard();
   renderArchive();
   renderRuntimeDetails();
@@ -510,15 +623,16 @@ function renderRuntimeDetails() {
       "运行计划",
       schedule.error
         ? `无效：${schedule.error}`
-        : `${schedule.timezone || "未配置"} · ${(schedule.cron || []).join("，") || "无 cron"}`,
+        : `${summary.schedule_view?.description || "未配置"} · ${schedule.timezone || "未配置"}`,
     ],
+    ["启动状态", nextRunText(summary)],
     ["项目状态", statusLabel(summary.paused ? "paused" : summary.status)],
     ["当前 Story", summary.current_story || "无"],
     ["工作阶段", runtime.story_phase ? phaseLabel(runtime.story_phase) : "无"],
     ["Story Session", sessionSummary],
     ["Project Supervisor", summary.project_session || "空闲"],
     ["Reporter", runner.active_reporter ? "活跃" : "空闲"],
-    ["下次检查", formatTime(runner.next_schedule_check_at)],
+    ["Runner 下次检查", formatTime(runner.next_schedule_check_at)],
   ]);
 }
 
@@ -778,7 +892,13 @@ function updateDrawerLock() {
 }
 
 async function loadProject(projectId) {
-  state.project = await request(`/api/projects/${encodeURIComponent(projectId)}`);
+  const project = await request(`/api/projects/${encodeURIComponent(projectId)}`);
+  if (state.scheduleEditorProjectId !== projectId) {
+    state.scheduleEditorProjectId = projectId;
+    state.scheduleMode = project.summary.schedule_view?.simple ? "simple" : "cron";
+    state.scheduleDirty = false;
+  }
+  state.project = project;
   renderProject();
 }
 
@@ -886,17 +1006,54 @@ for (const button of document.querySelectorAll(".response-submit")) {
   });
 }
 
+function markScheduleDirty() {
+  state.scheduleDirty = true;
+  if (state.project) {
+    renderScheduleSettings(state.project.summary);
+  }
+}
+
+for (const button of document.querySelectorAll("[data-schedule-mode]")) {
+  button.addEventListener("click", () => {
+    state.scheduleMode = button.dataset.scheduleMode;
+    renderScheduleSettings(state.project.summary);
+  });
+}
+
+for (const id of [
+  "schedule-timezone",
+  "cron-text",
+  "simple-kind",
+  "simple-fixed-time",
+  "simple-start-time",
+  "simple-end-time",
+  "simple-interval",
+]) {
+  document.getElementById(id).addEventListener("input", markScheduleDirty);
+  document.getElementById(id).addEventListener("change", markScheduleDirty);
+}
+
 document.getElementById("save-schedule").addEventListener("click", async () => {
   const crons = document.getElementById("cron-text").value
     .split("\n")
     .map(value => value.trim())
     .filter(Boolean);
   const timezone = document.getElementById("schedule-timezone").value.trim();
+  const body = state.scheduleMode === "simple"
+    ? {
+      action: "schedule",
+      mode: "simple",
+      timezone,
+      simple: simpleScheduleFromForm(),
+    }
+    : {action: "schedule", mode: "cron", cron: crons, timezone};
   try {
-    await postProject("control", {action: "schedule", cron: crons, timezone});
+    state.scheduleDirty = false;
+    await postProject("control", body);
     await openProjectDrawer("settings");
     showToast("运行计划已更新");
   } catch (error) {
+    state.scheduleDirty = true;
     showToast(error.message, true);
   }
 });

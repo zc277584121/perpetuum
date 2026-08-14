@@ -53,6 +53,11 @@ class ServerTests(unittest.TestCase):
                     status["projects"][0]["schedule"]["cron"],
                     ["0 0 * * *"],
                 )
+                self.assertEqual(
+                    status["projects"][0]["schedule_view"]["description"],
+                    "每天 00:00 启动",
+                )
+                self.assertIn("next_run_at", status["projects"][0]["schedule_view"])
 
                 with urlopen(
                     f"http://127.0.0.1:{port}/api/projects/{project_id}"
@@ -137,6 +142,31 @@ class ServerTests(unittest.TestCase):
                 schedule = storage.load_project_schedule(home, project_id)
                 self.assertEqual(schedule["timezone"], "UTC")
                 self.assertEqual(schedule["cron"], ["*/15 * * * *"])
+
+                request = Request(
+                    f"http://127.0.0.1:{port}/api/projects/{project_id}/control",
+                    data=json.dumps(
+                        {
+                            "action": "schedule",
+                            "mode": "simple",
+                            "timezone": "Asia/Shanghai",
+                            "simple": {
+                                "kind": "window",
+                                "start": "18:00",
+                                "end": "06:00",
+                                "interval_minutes": 30,
+                            },
+                        }
+                    ).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(request) as response:
+                    result = json.loads(response.read())
+                self.assertTrue(result["ok"])
+                schedule = storage.load_project_schedule(home, project_id)
+                self.assertEqual(schedule["timezone"], "Asia/Shanghai")
+                self.assertEqual(schedule["cron"], ["*/30 0-5,18-23 * * *"])
             finally:
                 server.stop()
 

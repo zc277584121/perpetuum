@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import unquote, urlparse
 
-from . import storage
+from . import scheduler, storage
 
 
 PROJECT_PATH = re.compile(r"^/api/projects/([^/]+)(?:/(inbox|response|control))?$")
@@ -49,6 +49,7 @@ def project_summary(
     state = storage.load_project_state(home, project_id)
     try:
         schedule = storage.load_project_schedule(home, project_id)
+        schedule_view = scheduler.schedule_view(schedule)
     except ValueError as exc:
         schedule = {
             "version": 1,
@@ -58,6 +59,11 @@ def project_summary(
             "force_run": False,
             "cron": [],
             "error": str(exc),
+        }
+        schedule_view = {
+            "description": "运行计划无效",
+            "simple": None,
+            "next_run_at": None,
         }
     active_projects = (runner_state or {}).get("active_projects", {})
     active = (
@@ -78,6 +84,7 @@ def project_summary(
         "paused": bool(schedule.get("paused", False)),
         "enabled": bool(schedule.get("enabled", True)),
         "schedule": schedule,
+        "schedule_view": schedule_view,
         "project_session": active.get("session") if isinstance(active, dict) else None,
     }
 
@@ -333,9 +340,15 @@ def handler_factory(home: Path) -> Any:
                 elif action == "control":
                     control_action = str(body.get("action", ""))
                     if control_action == "schedule":
-                        crons = body.get("cron", [])
-                        if not isinstance(crons, list):
-                            raise ValueError("cron 必须是列表")
+                        mode = str(body.get("mode", "cron"))
+                        if mode == "simple":
+                            crons = scheduler.crons_from_simple(body.get("simple"))
+                        elif mode == "cron":
+                            crons = body.get("cron", [])
+                            if not isinstance(crons, list):
+                                raise ValueError("cron 必须是列表")
+                        else:
+                            raise ValueError("运行计划模式必须是 simple 或 cron")
                         timezone_name = body.get("timezone")
                         storage.set_project_schedule(
                             home,

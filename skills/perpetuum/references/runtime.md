@@ -49,6 +49,8 @@ cron:
 分钟 小时 日 月 星期
 ```
 
+前端提供“易读设置”和“Cron 表达式”两种编辑方式。易读设置覆盖每天固定时间、每天在一个时间窗口内按间隔启动等常见计划；复杂计划继续使用 Cron。两种方式最终都只写入 `schedule.yaml` 的 `cron`，不会维护第二套配置。项目列表和项目页会根据项目时区显示人类可读计划与预计下次启动时间；暂停或停用时不显示虚假的启动时间。
+
 Runner 常驻运行并在进程内解释这些表达式，不调用 Linux cron、Windows Task Scheduler 或 systemd timer 启动每个 Project Supervisor。相同项目在同一个 cron 分钟只触发一次；已有活动 Project Supervisor 时不创建第二个，也不向原 TUI 追加启动 Prompt。
 
 `force_run` 由“立即运行”控制写入，Runner 消费后自动恢复为 `false`。`paused` 阻止新激活；它不结束已经运行的 Story。
