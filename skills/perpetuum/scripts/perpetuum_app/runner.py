@@ -1,4 +1,4 @@
-"""Background scheduler and top-level session lifecycle."""
+"""Background scheduler and top-level interactive session lifecycle."""
 
 from __future__ import annotations
 
@@ -9,21 +9,12 @@ import signal
 import sys
 import time
 import traceback
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import scheduler, sessions, storage
 from .server import RuntimeServer
-
-
-def parse_utc(value: Optional[str]) -> Optional[datetime]:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
 
 
 class Runner:
@@ -36,6 +27,9 @@ class Runner:
         )
         if not isinstance(self.state, dict):
             self.state = storage.default_runner_state()
+        self.state.setdefault("active_projects", {})
+        self.state.setdefault("last_schedule_slots", {})
+        self.state.setdefault("schedule_errors", {})
         self.force_stop = False
 
     def save_state(self) -> None:
@@ -58,73 +52,66 @@ class Runner:
             return
         self.event("unsafe_run_dir_ignored", run_dir=str(run_dir))
 
-    def activation_check_due(self, config: Dict[str, Any], now: datetime) -> bool:
-        projects = config.get("projects", {})
-        if isinstance(projects, dict):
-            if any(
-                isinstance(entry, dict) and entry.get("force_run", False)
-                for entry in projects.values()
-            ):
-                return True
-        last = parse_utc(self.state.get("last_activation_check_at"))
-        interval = max(1, int(config.get("poll_interval_minutes", 30)))
-        return last is None or now - last >= timedelta(minutes=interval)
-
-    def update_next_check(self, config: Dict[str, Any], now: datetime) -> None:
-        interval = max(1, int(config.get("poll_interval_minutes", 30)))
-        self.state["last_activation_check_at"] = storage.utc_now()
-        self.state["next_activation_check_at"] = (
-            now + timedelta(minutes=interval)
-        ).isoformat().replace("+00:00", "Z")
+    def project_payload(self, project_id: str) -> Optional[Dict[str, Any]]:
+        project = storage.load_project(self.home, project_id)
+        if not project:
+            self.write_control_escalation(
+                project_id,
+                "Runner 找不到项目配置",
+                "项目已经注册，但 project.yaml 缺失或无法解析。",
+                "请检查项目 Harness 是否被移动或损坏。",
+            )
+            return None
+        project_path = Path(str(project.get("path", ""))).expanduser()
+        if not project_path.is_dir():
+            self.write_control_escalation(
+                project_id,
+                "Runner 无法访问项目目录",
+                f"project.yaml 指向的目录不存在或不可访问：{project_path}",
+                "请恢复目录或修正 project.yaml 后再使用“立即运行”验证。",
+            )
+            return None
+        raw_agent = project.get("agent", {})
+        agent = raw_agent if isinstance(raw_agent, dict) else {}
+        kind = str(agent.get("kind", "codex"))
+        if kind not in {"codex", "claude"}:
+            self.write_control_escalation(
+                project_id,
+                "Runner 无法识别 Agent 类型",
+                f"project.yaml 中的 Agent 类型无效：{kind}",
+                "请把 Agent 类型修正为 codex 或 claude。",
+            )
+            return None
+        return {
+            "id": project_id,
+            "name": project.get("name", project_id),
+            "path": str(project_path.resolve()),
+            "harness": str(storage.project_dir(self.home, project_id)),
+            "agent": {"kind": kind},
+        }
 
     def project_payloads(self, project_ids: List[str]) -> List[Dict[str, Any]]:
         payloads = []
         for project_id in project_ids:
-            project = storage.load_project(self.home, project_id)
-            if not project:
+            try:
+                payload = self.project_payload(project_id)
+            except ValueError as exc:
                 self.write_control_escalation(
                     project_id,
-                    "Runner 找不到项目配置",
-                    "项目已在 activation.yaml 注册，但 project.yaml 缺失或无法解析。",
-                    "本次不会启动该项目。请检查项目 Harness 是否被移动或损坏。",
+                    "Runner 无法读取项目计划",
+                    str(exc),
+                    "请修正 schedule.yaml 后再使用“立即运行”验证。",
                 )
-                continue
-            project_path = Path(str(project.get("path", ""))).expanduser()
-            if not project_path.is_dir():
-                self.write_control_escalation(
-                    project_id,
-                    "Runner 无法访问项目目录",
-                    f"project.yaml 指向的目录不存在或不可访问：{project_path}",
-                    "本次不会启动该项目。请恢复目录或修正 project.yaml 后再验证。",
-                )
-                continue
-            raw_agent = project.get("agent", {})
-            agent = raw_agent if isinstance(raw_agent, dict) else {}
-            kind = str(agent.get("kind", "codex"))
-            if kind not in {"codex", "claude"}:
-                self.write_control_escalation(
-                    project_id,
-                    "Runner 无法识别 Agent 类型",
-                    f"project.yaml 中的 Agent 类型无效：{kind}",
-                    "本次不会启动该项目。请把 Agent 类型修正为 codex 或 claude。",
-                )
-                continue
-            payloads.append(
-                {
-                    "id": project_id,
-                    "name": project.get("name", project_id),
-                    "path": str(project_path.resolve()),
-                    "harness": str(storage.project_dir(self.home, project_id)),
-                    "agent": {"kind": kind},
-                }
-            )
+                payload = None
+            if payload is not None:
+                payloads.append(payload)
         return payloads
 
-    def create_dispatch(
+    def create_run(
         self,
         role: str,
-        projects: List[Dict[str, Any]],
         carrier_session: str,
+        payload: Dict[str, Any],
     ) -> Tuple[Path, Path, Path, str]:
         run_id = (
             f"{role}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-"
@@ -134,21 +121,23 @@ class Runner:
         run_dir.mkdir(parents=True, exist_ok=False)
         dispatch_path = run_dir / "dispatch.json"
         receipt_path = run_dir / "receipt.json"
-        playbooks_dir = self.skill_root / "references" / "playbooks"
+        playbooks = self.skill_root / "references" / "playbooks"
         references = {
             "architecture": str(self.skill_root / "references" / "architecture.md"),
-            "root_supervisor": str(playbooks_dir / "root-supervisor.md"),
-            "project_supervisor": str(playbooks_dir / "project-supervisor.md"),
-            "story_supervisor": str(playbooks_dir / "story-supervisor.md"),
-            "explorer": str(playbooks_dir / "explorer.md"),
-            "executor": str(playbooks_dir / "executor.md"),
-            "validator": str(playbooks_dir / "validator.md"),
-            "reporter": str(playbooks_dir / "reporter.md"),
+            "runtime": str(self.skill_root / "references" / "runtime.md"),
             "human_communication": str(
                 self.skill_root / "references" / "human-communication.md"
             ),
-            "runtime": str(self.skill_root / "references" / "runtime.md"),
         }
+        if role == "project":
+            references["project_supervisor"] = str(
+                playbooks / "project-supervisor.md"
+            )
+            references["story_supervisor"] = str(
+                playbooks / "story-supervisor.md"
+            )
+        else:
+            references["reporter"] = str(playbooks / "reporter.md")
         dispatch = {
             "version": 1,
             "role": role,
@@ -157,77 +146,180 @@ class Runner:
             "perpetuum_home": str(self.home),
             "runner_state": str(storage.runner_state_path(self.home)),
             "carrier_session": carrier_session,
-            "projects": projects,
             "references": references,
             "receipt_path": str(receipt_path),
+            **payload,
         }
         storage.write_json(dispatch_path, dispatch)
         return run_dir, dispatch_path, receipt_path, run_id
 
-    def build_prompt(
+    def build_project_prompt(
         self,
-        role: str,
+        dispatch_path: Path,
+        receipt_path: Path,
+        carrier_session: str,
+        project: Dict[str, Any],
+        trigger: Dict[str, Any],
+    ) -> str:
+        playbook_path = (
+            self.skill_root
+            / "references"
+            / "playbooks"
+            / "project-supervisor.md"
+        )
+        reason = (
+            f"cron `{trigger.get('matched_cron')}` 匹配"
+            if trigger.get("reason") == "cron"
+            else "人类请求立即运行"
+        )
+        return f"""你是项目“{project['name']}”本次激活的 Project Supervisor。
+
+项目目录：{project['path']}
+Harness：{project['harness']}
+本次触发：{reason}
+触发时间：{trigger.get('triggered_at')}
+本次 dispatch：{dispatch_path}
+角色 Playbook：{playbook_path}
+完成回执：{receipt_path}
+当前承载 session：{carrier_session}
+
+这是一次新的独立激活。先完整读取 dispatch、角色 Playbook 和项目当前状态，再决定本轮是否值得推进一张 Story。不要机械重复上一次运行的动作。
+
+工作时遵守以下边界：
+- 当前承载 session 由 Runner 创建和回收，不是你创建的直属子 session；不要关闭、接管或向它发送消息。
+- 需要推进 Story 时，通过当前安装的 cc-use Skill 创建唯一的 Story Supervisor；不要在这里硬编码或猜测 cc-use 的具体命令和参数。
+- 同一项目本轮最多推进一张 Story。没有可运行 Story 时可以按 Playbook 调用一次 Explorer 整理看板，仍无工作则正常返回 Idle。
+- 只管理本次由你明确创建并保存了精确名称的直属子 session；全局 session 列表和项目状态只能用于观察，不能证明所有权。
+- 根据 Playbook、Harness 和实际结果组织下级 Prompt。不要因为时间经过、session 仍存活或屏幕暂时没有变化，就发送固定的“继续”Prompt。
+- 不使用非交互式 Agent 模式代替 TUI。无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。
+- 无论成功、Idle、等待还是无法继续，都先关闭并复核自己创建的全部直属子 session，再更新项目状态。
+- 最后把一个 JSON 对象原子写入 {receipt_path}。至少包含 status、summary、project_id、finished_at；先写同目录临时文件，再重命名。
+- 写完回执后等待 Runner 回收当前 session，不要自行启动长期等待或定时 Prompt 循环。
+"""
+
+    def build_reporter_prompt(
+        self,
         dispatch_path: Path,
         receipt_path: Path,
         carrier_session: str,
     ) -> str:
-        if role == "root":
-            role_name = "Root Supervisor"
-            playbook_path = (
-                self.skill_root
-                / "references"
-                / "playbooks"
-                / "root-supervisor.md"
-            )
-        else:
-            role_name = "Reporter"
-            playbook_path = (
-                self.skill_root / "references" / "playbooks" / "reporter.md"
-            )
-
-        return f"""你是本次 Perpetuum 激活的 {role_name}。
+        playbook_path = (
+            self.skill_root / "references" / "playbooks" / "reporter.md"
+        )
+        return f"""你是本次 Perpetuum 激活的 Reporter。
 
 本次 dispatch：{dispatch_path}
 角色 Playbook：{playbook_path}
 完成回执：{receipt_path}
 当前承载 session：{carrier_session}
 
-这是一次新的独立激活。先完整读取 dispatch、角色 Playbook 和其中要求的必要材料，再根据当前现场决定怎样工作；不要机械重复上一次运行的动作。
+先完整读取 dispatch、角色 Playbook 和其中要求的项目材料，再独立生成日报。不要启动业务 Story，也不要假设 Project Supervisor 必须成功运行后才能汇报。
 
-工作时遵守以下边界：
-- 当前承载 session 由 Runner 创建和回收，不是你创建的直属子 session；不要关闭、接管或向它发送消息。
-- 通过当前安装的 cc-use Skill 管理所有下级 Agent，并为每个下级使用唯一 session；不要在这里硬编码或猜测 cc-use 的具体命令和参数。
-- 只管理本次由你明确创建并保存了精确名称的直属子 session；全局 session 列表和项目状态只用于观察，不能证明所有权。
-- 根据 Playbook、Harness 和实际结果组织下级 Prompt。不要因为时间经过、session 仍存活或屏幕暂时没有变化，就发送固定的“继续”Prompt。
-- 不使用非交互式 Agent 模式代替 TUI。无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。
-- 无论成功、Idle、部分失败还是无法继续，都先按当前 cc-use Skill 的退出流程关闭并复核自己创建的全部直属子 session。
-- 只有直属子 session 全部关闭、相关状态和报告已经更新后，才能把一个 JSON 对象原子写入 {receipt_path}。至少包含 status、summary、projects、finished_at；先写同目录临时文件，再重命名。
-- 写完回执后等待 Runner 回收当前 session，不要自行启动长期等待或定时 Prompt 循环。
+当前承载 session 由 Runner 创建和回收。只管理本次由你明确创建并保存了精确名称的直属子 session；不要关闭、接管或向当前承载 session 发送消息。不要因为时间经过或屏幕暂时没有变化发送固定 Prompt。
+
+完成全部报告并关闭直属子 session 后，把一个 JSON 对象原子写入 {receipt_path}。至少包含 status、summary、projects、finished_at；先写同目录临时文件，再重命名。写完后等待 Runner 回收当前 session。
 """
 
-    def launch_top_level(
+    def launch_project(
         self,
-        role: str,
+        project_id: str,
+        trigger: Dict[str, Any],
+        config: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            project = self.project_payload(project_id)
+        except ValueError as exc:
+            self.write_control_escalation(
+                project_id,
+                "Runner 无法读取项目计划",
+                str(exc),
+                "请修正 schedule.yaml 后再使用“立即运行”验证。",
+            )
+            return None
+        if project is None:
+            return None
+        carrier_session = sessions.session_name("project", project_id)
+        run_dir, dispatch_path, receipt_path, run_id = self.create_run(
+            "project",
+            carrier_session,
+            {"project": project, "trigger": trigger},
+        )
+        kind = str(project["agent"].get("kind", "codex"))
+        startup_seconds = int(
+            config.get("service", {}).get("agent_startup_seconds", 8)
+        )
+        prompt = self.build_project_prompt(
+            dispatch_path,
+            receipt_path,
+            carrier_session,
+            project,
+            trigger,
+        )
+        try:
+            command = sessions.agent_command(kind)
+            session = sessions.launch_session(
+                role="project",
+                command=command,
+                cwd=Path(project["path"]),
+                prompt=prompt,
+                startup_seconds=startup_seconds,
+                kind=kind,
+                name=carrier_session,
+            )
+        except Exception as exc:
+            self.cleanup_run_dir(run_dir)
+            self.write_control_escalation(
+                project_id,
+                "无法启动 Project Supervisor session",
+                str(exc),
+                "请检查 tmux、Agent TUI、环境变量和认证，再使用“立即运行”验证。",
+            )
+            self.state["last_error"] = str(exc)
+            self.event(
+                "project_session_launch_failed",
+                project_id=project_id,
+                error=str(exc),
+            )
+            return None
+        active = {
+            "role": "project",
+            "run_id": run_id,
+            "session": session,
+            "project_id": project_id,
+            "dispatch_path": str(dispatch_path),
+            "receipt_path": str(receipt_path),
+            "run_dir": str(run_dir),
+            "trigger": trigger,
+            "started_at": storage.utc_now(),
+        }
+        self.event(
+            "project_session_started",
+            project_id=project_id,
+            run_id=run_id,
+            session=session,
+            trigger=trigger,
+        )
+        return active
+
+    def launch_reporter(
+        self,
         project_ids: List[str],
         config: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         projects = self.project_payloads(project_ids)
         if not projects:
             return None
-
-        carrier_session = sessions.session_name(role)
-        run_dir, dispatch_path, receipt_path, run_id = self.create_dispatch(
-            role,
-            projects,
+        carrier_session = sessions.session_name("reporter")
+        run_dir, dispatch_path, receipt_path, run_id = self.create_run(
+            "reporter",
             carrier_session,
+            {"projects": projects},
         )
-        first_agent = projects[0].get("agent", {})
-        kind = str(first_agent.get("kind", "codex"))
+        kind = str(projects[0]["agent"].get("kind", "codex"))
         startup_seconds = int(
             config.get("service", {}).get("agent_startup_seconds", 8)
         )
-        prompt = self.build_prompt(
-            role,
+        prompt = self.build_reporter_prompt(
             dispatch_path,
             receipt_path,
             carrier_session,
@@ -235,7 +327,7 @@ class Runner:
         try:
             command = sessions.agent_command(kind)
             session = sessions.launch_session(
-                role=role,
+                role="reporter",
                 command=command,
                 cwd=Path(projects[0]["path"]),
                 prompt=prompt,
@@ -248,21 +340,15 @@ class Runner:
             for project in projects:
                 self.write_control_escalation(
                     project["id"],
-                    f"无法启动 {role} session",
+                    "无法启动 Reporter session",
                     str(exc),
-                    "Runner 已停止本次顶层调用。请检查 tmux、Agent TUI、环境变量和认证，再使用“立即运行”验证。",
+                    "请检查 tmux、Agent TUI、环境变量和认证，再手动请求日报验证。",
                 )
             self.state["last_error"] = str(exc)
-            self.event(
-                "top_session_launch_failed",
-                role=role,
-                project_ids=[project["id"] for project in projects],
-                error=str(exc),
-            )
+            self.event("reporter_session_launch_failed", error=str(exc))
             return None
-
         active = {
-            "role": role,
+            "role": "reporter",
             "run_id": run_id,
             "session": session,
             "project_ids": [project["id"] for project in projects],
@@ -272,8 +358,7 @@ class Runner:
             "started_at": storage.utc_now(),
         }
         self.event(
-            "top_session_started",
-            role=role,
+            "reporter_session_started",
             run_id=run_id,
             session=session,
             project_ids=active["project_ids"],
@@ -282,22 +367,13 @@ class Runner:
 
     def reconcile_active(
         self,
-        state_key: str,
+        active: Dict[str, Any],
+        project_ids: List[str],
         config: Dict[str, Any],
-    ) -> None:
-        active = self.state.get(state_key)
-        if not isinstance(active, dict):
-            return
-
+    ) -> bool:
         session = str(active.get("session", ""))
         receipt_path = Path(str(active.get("receipt_path", "")))
         run_dir = Path(str(active.get("run_dir", "")))
-        raw_project_ids = active.get("project_ids", [])
-        project_ids = (
-            [str(value) for value in raw_project_ids]
-            if isinstance(raw_project_ids, list)
-            else []
-        )
         role = str(active.get("role", "unknown"))
         owned_session = sessions.is_owned_top_session(session, role)
         valid_receipt = (
@@ -305,7 +381,6 @@ class Runner:
             and receipt_path.name == "receipt.json"
             and receipt_path.parent.resolve() == run_dir.resolve()
         )
-
         if valid_receipt and receipt_path.is_file():
             receipt = storage.read_json(receipt_path, {})
             if owned_session and sessions.session_exists(session):
@@ -321,13 +396,10 @@ class Runner:
             if role == "reporter":
                 local = scheduler.local_now(str(config.get("timezone", "UTC")))
                 self.state["last_report_date"] = local.strftime("%Y-%m-%d")
-            self.state[state_key] = None
             self.cleanup_run_dir(run_dir)
-            return
-
+            return True
         if owned_session and sessions.session_exists(session):
-            return
-
+            return False
         for project_id in project_ids:
             self.write_control_escalation(
                 project_id,
@@ -337,9 +409,8 @@ class Runner:
                     f"且没有找到回执文件 {receipt_path}。"
                 ),
                 (
-                    "本次顶层调用被视为失败。请查看 runner/events.log 和项目 runtime/events.log，"
-                    "确认是否存在 TUI 退出、认证、环境变量或人工关闭 session 的问题；"
-                    "处理后使用“立即运行”验证。"
+                    "请查看 runner/events.log 和项目 runtime/events.log，确认是否存在 TUI 退出、"
+                    "认证、环境变量或人工关闭 session 的问题；处理后重新触发项目验证。"
                 ),
             )
         self.event(
@@ -352,8 +423,34 @@ class Runner:
         if role == "reporter":
             local = scheduler.local_now(str(config.get("timezone", "UTC")))
             self.state["last_report_date"] = local.strftime("%Y-%m-%d")
-        self.state[state_key] = None
         self.cleanup_run_dir(run_dir)
+        return True
+
+    def reconcile_projects(self, config: Dict[str, Any]) -> None:
+        active_projects = self.state.setdefault("active_projects", {})
+        if not isinstance(active_projects, dict):
+            active_projects = {}
+            self.state["active_projects"] = active_projects
+        for project_id, active in list(active_projects.items()):
+            if not isinstance(active, dict) or self.reconcile_active(
+                active,
+                [project_id],
+                config,
+            ):
+                active_projects.pop(project_id, None)
+
+    def reconcile_reporter(self, config: Dict[str, Any]) -> None:
+        active = self.state.get("active_reporter")
+        if not isinstance(active, dict):
+            return
+        raw_project_ids = active.get("project_ids", [])
+        project_ids = (
+            [str(value) for value in raw_project_ids]
+            if isinstance(raw_project_ids, list)
+            else []
+        )
+        if self.reconcile_active(active, project_ids, config):
+            self.state["active_reporter"] = None
 
     def write_control_escalation(
         self,
@@ -376,12 +473,12 @@ class Runner:
             f"**发生了什么**\n\n{detail}\n\n"
             "**影响**\n\n本次自动工作链路没有获得可信完成结果，"
             "项目不会把这次运行计为已完成 Story。\n\n"
-            "**已尝试的恢复**\n\nRunner 已检查完成回执和顶层 tmux session，"
+            "**已尝试的恢复**\n\nRunner 已检查完成回执和 Project Supervisor tmux session，"
             "并停止继续假设本次运行成功。\n\n"
             "**为什么不能自动处理**\n\n继续重试可能重复消耗额度、覆盖现场或制造并行 Story，"
             "需要先确认底层原因。\n\n"
             f"**人类需要做什么**\n\n{action}\n\n"
-            "**恢复验证**\n\n处理后触发一次项目运行，确认 Root、Project、Story 链路"
+            "**恢复验证**\n\n处理后触发一次项目运行，确认 Project 与 Story 链路"
             "能够写入完成回执，并在日报中出现可信结果。\n\n"
             f"**原始状态**\n\n- Runner 日志：`{storage.runner_events_path(self.home)}`\n"
             f"- 项目运行日志：`{harness / 'runtime' / 'events.log'}`\n"
@@ -407,8 +504,25 @@ class Runner:
             title=title,
         )
 
-    def clear_report_force(self, config: Dict[str, Any]) -> None:
-        del config
+    def read_project_schedule(self, project_id: str) -> Optional[Dict[str, Any]]:
+        errors = self.state.setdefault("schedule_errors", {})
+        try:
+            schedule = storage.load_project_schedule(self.home, project_id)
+        except ValueError as exc:
+            message = str(exc)
+            if errors.get(project_id) != message:
+                self.write_control_escalation(
+                    project_id,
+                    "项目运行计划无效",
+                    message,
+                    "请修正 schedule.yaml 中的时区和标准五字段 cron 表达式。",
+                )
+                errors[project_id] = message
+            return None
+        errors.pop(project_id, None)
+        return schedule
+
+    def clear_report_force(self) -> None:
         current = storage.ensure_home(self.home)
         report = current.get("report", {})
         if isinstance(report, dict) and report.get("force", False):
@@ -419,40 +533,62 @@ class Runner:
         config = storage.ensure_home(self.home)
         now = datetime.now(timezone.utc)
         self.state["last_tick_at"] = storage.utc_now()
+        self.state["next_schedule_check_at"] = scheduler.next_schedule_check(now)
 
-        self.reconcile_active("active_root", config)
-        self.reconcile_active("active_reporter", config)
+        self.reconcile_projects(config)
+        self.reconcile_reporter(config)
 
         service = config.get("service", {})
-        stopping = bool(service.get("stop_requested", False))
-        restarting = bool(service.get("restart_requested", False))
-        if stopping or restarting:
+        if service.get("stop_requested", False) or service.get(
+            "restart_requested", False
+        ):
             self.state["service"]["status"] = "draining"
             self.save_state()
             return
 
-        if self.activation_check_due(config, now):
-            self.update_next_check(config, now)
-            eligible = scheduler.eligible_projects(config)
-            if eligible and not self.state.get("active_root"):
-                active = self.launch_top_level("root", eligible, config)
-                storage.consume_project_force_flags(self.home, eligible)
-                if active:
-                    self.state["active_root"] = active
-            self.event("activation_checked", eligible_project_ids=eligible)
+        active_projects = self.state.setdefault("active_projects", {})
+        last_slots = self.state.setdefault("last_schedule_slots", {})
+        for project_id in storage.list_project_ids(self.home):
+            schedule = self.read_project_schedule(project_id)
+            if schedule is None:
+                continue
+            trigger = scheduler.project_trigger(
+                schedule,
+                last_slots.get(project_id),
+                now,
+            )
+            if trigger is None:
+                continue
+            if trigger.get("cron_minute"):
+                last_slots[project_id] = trigger["cron_minute"]
+            if project_id in active_projects:
+                if trigger.get("reason") == "manual":
+                    storage.consume_project_force_flags(self.home, [project_id])
+                self.event(
+                    "project_activation_skipped",
+                    project_id=project_id,
+                    reason="already_active",
+                    trigger=trigger,
+                )
+                continue
+            active = self.launch_project(project_id, trigger, config)
+            if trigger.get("reason") == "manual":
+                storage.consume_project_force_flags(self.home, [project_id])
+            if active is not None:
+                active_projects[project_id] = active
 
         if (
-            scheduler.report_due(config, self.state.get("last_report_date"))
+            scheduler.report_due(config, self.state.get("last_report_date"), now)
             and not self.state.get("active_reporter")
         ):
             project_ids = storage.list_project_ids(self.home)
-            active = self.launch_top_level("reporter", project_ids, config)
+            active = self.launch_reporter(project_ids, config)
             if active:
                 self.state["active_reporter"] = active
             else:
-                local = scheduler.local_now(str(config.get("timezone", "UTC")))
+                local = scheduler.local_now(str(config.get("timezone", "UTC")), now)
                 self.state["last_report_date"] = local.strftime("%Y-%m-%d")
-            self.clear_report_force(config)
+            self.clear_report_force()
 
         self.state["last_error"] = None
         self.save_state()
@@ -462,8 +598,7 @@ class Runner:
         service = config.get("service", {})
         if self.force_stop:
             return "stop"
-        active = self.state.get("active_root") or self.state.get("active_reporter")
-        if active:
+        if self.state.get("active_projects") or self.state.get("active_reporter"):
             return None
         if service.get("restart_requested", False):
             return "restart"
@@ -472,27 +607,31 @@ class Runner:
         return None
 
     def force_cleanup(self) -> None:
-        for key in ("active_root", "active_reporter"):
-            active = self.state.get(key)
-            if not isinstance(active, dict):
-                continue
-            session = str(active.get("session", ""))
-            role = str(active.get("role", ""))
-            if (
-                sessions.is_owned_top_session(session, role)
-                and sessions.session_exists(session)
-            ):
-                sessions.kill_session(session)
-            raw_project_ids = active.get("project_ids", [])
-            project_ids = raw_project_ids if isinstance(raw_project_ids, list) else []
-            for project_id in project_ids:
+        active_projects = self.state.get("active_projects", {})
+        if isinstance(active_projects, dict):
+            for project_id, active in list(active_projects.items()):
+                if not isinstance(active, dict):
+                    continue
+                session = str(active.get("session", ""))
+                if sessions.is_owned_top_session(
+                    session, "project"
+                ) and sessions.session_exists(session):
+                    sessions.kill_session(session)
                 self.write_control_escalation(
                     project_id,
                     "Perpetuum 服务被强制停止",
-                    f"顶层 session {session} 在未完成回执时被终止。",
+                    f"Project Supervisor session {session} 在未完成回执时被终止。",
                     "确认没有遗留的子 session 或半完成业务变更，再重新启动服务并手动触发项目验证。",
                 )
-            self.state[key] = None
+            self.state["active_projects"] = {}
+        active_reporter = self.state.get("active_reporter")
+        if isinstance(active_reporter, dict):
+            session = str(active_reporter.get("session", ""))
+            if sessions.is_owned_top_session(
+                session, "reporter"
+            ) and sessions.session_exists(session):
+                sessions.kill_session(session)
+            self.state["active_reporter"] = None
 
 
 def reset_service_request(home: Path, key: str) -> None:

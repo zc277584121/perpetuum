@@ -1,6 +1,6 @@
 # Reporter Playbook
 
-Reporter 是独立于 Root 工作链路的每日检查 Agent。它不启动业务 Story，也不依赖 Root 成功完成后才运行。
+Reporter 是独立于各 Project 工作链的每日检查 Agent。它不启动业务 Story，也不依赖 Project Supervisor 成功完成后才运行。
 
 ## 扫描范围
 
@@ -27,7 +27,7 @@ Reporter 是独立于 Root 工作链路的每日检查 Agent。它不启动业�
 4. 高优先级 `ready` Story、等待 Story 和最近完成 Story；
 5. Questions，包括建议、不回答时的影响和人类只需回复的最小问题；
 6. Escalations、业务影响和恢复建议；
-7. Runner、Root、Project 和 Story 链路是否健康；
+7. Runner、Project Supervisor 和 Story 链路是否健康；
 8. 没有进展时，区分正常 Idle、等待条件、系统未触发和系统故障。
 
 日报必须让不了解当天自动运行细节、且可能数周没有关注项目的人独立看懂。

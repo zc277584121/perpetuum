@@ -1,74 +1,62 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import unittest
 
 from perpetuum_app import scheduler
 
 
 class SchedulerTests(unittest.TestCase):
-    def test_daily_window(self):
-        self.assertTrue(
-            scheduler.window_matches(
-                "18:00-24:00",
-                datetime(2026, 8, 5, 22, 0),
-            )
-        )
-        self.assertFalse(
-            scheduler.window_matches(
-                "18:00-24:00",
-                datetime(2026, 8, 5, 17, 59),
-            )
-        )
-
-    def test_cross_midnight_window(self):
-        self.assertTrue(
-            scheduler.window_matches(
-                "23:00-06:00",
-                datetime(2026, 8, 6, 2, 0),
-            )
-        )
-        self.assertFalse(
-            scheduler.window_matches(
-                "23:00-06:00",
-                datetime(2026, 8, 6, 12, 0),
-            )
-        )
-
-    def test_cross_midnight_uses_start_day(self):
-        window = {"days": [2], "start": "23:00", "end": "06:00"}
-        self.assertTrue(
-            scheduler.window_matches(window, datetime(2026, 8, 6, 2, 0))
-        )
-        self.assertFalse(
-            scheduler.window_matches(window, datetime(2026, 8, 7, 2, 0))
-        )
-
-    def test_force_run_ignores_window(self):
-        entry = {
+    def schedule(self, expression="*/5 0-5 * * *"):
+        return {
+            "version": 1,
+            "timezone": "Asia/Shanghai",
             "enabled": True,
             "paused": False,
-            "force_run": True,
-            "windows": ["18:00-19:00"],
+            "force_run": False,
+            "cron": [expression],
         }
-        self.assertTrue(
-            scheduler.project_is_eligible(
-                entry,
-                datetime(2026, 8, 5, 10, 0),
-            )
+
+    def test_cron_matches_project_timezone(self):
+        now = datetime(2026, 8, 5, 16, 10, tzinfo=timezone.utc)
+        self.assertEqual(
+            scheduler.matching_crons(self.schedule(), now),
+            ["*/5 0-5 * * *"],
         )
 
-    def test_paused_project_is_never_eligible(self):
-        entry = {
-            "enabled": True,
-            "paused": True,
-            "force_run": True,
-            "windows": ["00:00-24:00"],
-        }
-        self.assertFalse(
-            scheduler.project_is_eligible(
-                entry,
-                datetime(2026, 8, 5, 10, 0),
-            )
+    def test_cron_does_not_match_outside_range(self):
+        now = datetime(2026, 8, 6, 2, 10, tzinfo=timezone.utc)
+        self.assertEqual(scheduler.matching_crons(self.schedule(), now), [])
+
+    def test_same_cron_minute_only_triggers_once(self):
+        now = datetime(2026, 8, 5, 16, 10, tzinfo=timezone.utc)
+        first = scheduler.project_trigger(self.schedule(), None, now)
+        self.assertIsNotNone(first)
+        second = scheduler.project_trigger(
+            self.schedule(),
+            first["cron_minute"],
+            now,
         )
+        self.assertIsNone(second)
+
+    def test_force_run_ignores_cron_but_not_pause(self):
+        schedule = self.schedule("0 12 * * *")
+        schedule["force_run"] = True
+        now = datetime(2026, 8, 5, 16, 10, tzinfo=timezone.utc)
+        self.assertEqual(
+            scheduler.project_trigger(schedule, None, now)["reason"],
+            "manual",
+        )
+        schedule["paused"] = True
+        self.assertIsNone(scheduler.project_trigger(schedule, None, now))
+
+    def test_only_standard_five_field_cron_is_accepted(self):
+        with self.assertRaisesRegex(ValueError, "标准五字段"):
+            scheduler.validate_cron("0 0 0 * * *")
+
+    def test_invalid_timezone_is_rejected(self):
+        schedule = self.schedule()
+        schedule["timezone"] = "Nowhere/Invalid"
+        with self.assertRaisesRegex(ValueError, "无效时区"):
+            scheduler.validate_project_schedule(schedule)
 
 
 if __name__ == "__main__":

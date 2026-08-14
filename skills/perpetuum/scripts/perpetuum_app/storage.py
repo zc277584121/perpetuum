@@ -13,6 +13,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import yaml
 
+from . import scheduler
+
 
 STORY_STATUSES = (
     "candidate",
@@ -46,7 +48,6 @@ STORY_MUTABLE_FIELDS = {
 DEFAULT_ACTIVATION = {
     "version": 1,
     "timezone": "Asia/Shanghai",
-    "poll_interval_minutes": 30,
     "report": {
         "enabled": True,
         "time": "09:00",
@@ -103,6 +104,10 @@ def project_dir(home: Path, project_id: str) -> Path:
 
 def stories_dir(home: Path, project_id: str) -> Path:
     return project_dir(home, project_id) / "stories"
+
+
+def project_schedule_path(home: Path, project_id: str) -> Path:
+    return project_dir(home, project_id) / "schedule.yaml"
 
 
 def validate_story_id(story_id: str) -> str:
@@ -368,6 +373,29 @@ def write_json(path: Path, value: Any) -> None:
     )
 
 
+def read_yaml(path: Path, default: Any = None) -> Any:
+    try:
+        value = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, UnicodeDecodeError, OSError):
+        return default
+    except yaml.YAMLError as exc:
+        raise ValueError(f"YAML 无法解析：{path}：{exc}") from exc
+    return default if value is None else value
+
+
+def write_yaml(path: Path, value: Any) -> None:
+    atomic_write_text(
+        path,
+        yaml.safe_dump(
+            value,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=False,
+            width=1000,
+        ),
+    )
+
+
 def append_event(path: Path, event: str, **fields: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"time": utc_now(), "event": event}
@@ -415,7 +443,7 @@ def merge_defaults(value: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str,
 
 def default_runner_state() -> Dict[str, Any]:
     return {
-        "version": 1,
+        "version": 2,
         "service": {
             "status": "stopped",
             "pid": None,
@@ -423,10 +451,11 @@ def default_runner_state() -> Dict[str, Any]:
             "stopped_at": None,
         },
         "last_tick_at": None,
-        "last_activation_check_at": None,
-        "next_activation_check_at": None,
+        "next_schedule_check_at": None,
+        "last_schedule_slots": {},
+        "schedule_errors": {},
         "last_report_date": None,
-        "active_root": None,
+        "active_projects": {},
         "active_reporter": None,
         "last_error": None,
     }
@@ -452,34 +481,29 @@ def detect_agent_kind() -> str:
     return "codex"
 
 
-def validate_window(window: str) -> str:
-    if "-" not in window:
-        raise ValueError("时间窗口必须使用 HH:MM-HH:MM 格式")
-    start, end = window.split("-", 1)
-    for value, allow_24 in ((start, False), (end, True)):
-        match = re.fullmatch(r"(\d{2}):(\d{2})", value)
-        if not match:
-            raise ValueError("时间窗口必须使用 HH:MM-HH:MM 格式")
-        hour, minute = int(match.group(1)), int(match.group(2))
-        if minute > 59 or hour > 24 or (hour == 24 and (minute != 0 or not allow_24)):
-            raise ValueError("时间窗口包含无效时间")
-    return window
-
-
 def register_project(
     home: Path,
     path: Path,
     name: Optional[str] = None,
     project_id: Optional[str] = None,
     agent: Optional[str] = None,
-    window: str = "00:00-24:00",
+    crons: Optional[List[str]] = None,
+    timezone_name: str = "Asia/Shanghai",
 ) -> str:
     config = ensure_home(home)
     resolved = path.expanduser().resolve()
     if not resolved.is_dir():
         raise ValueError(f"项目目录不存在：{resolved}")
 
-    validate_window(window)
+    schedule = scheduler.validate_project_schedule(
+        {
+            "timezone": timezone_name,
+            "enabled": True,
+            "paused": False,
+            "force_run": False,
+            "cron": crons or ["0 0 * * *"],
+        }
+    )
     selected_agent = agent or detect_agent_kind()
     if selected_agent not in {"codex", "claude"}:
         raise ValueError("Agent 只能是 codex 或 claude")
@@ -515,6 +539,7 @@ def register_project(
         "updated_at": utc_now(),
     }
     write_json(project_config_path, project_config)
+    write_yaml(project_schedule_path(home, selected_id), schedule)
 
     templates = project_templates(display_name, resolved)
     for relative, content in templates.items():
@@ -527,7 +552,7 @@ def register_project(
         write_json(
             runtime_state,
             {
-                "version": 2,
+                "version": 1,
                 "status": "idle",
                 "current_story": None,
                 "story_phase": None,
@@ -539,15 +564,14 @@ def register_project(
     (harness / "runtime" / "events.log").touch(exist_ok=True)
 
     projects = config.setdefault("projects", {})
-    existing_activation = projects.get(selected_id, {})
     projects[selected_id] = {
-        "enabled": existing_activation.get("enabled", True),
-        "paused": existing_activation.get("paused", False),
-        "force_run": existing_activation.get("force_run", False),
-        "windows": existing_activation.get("windows", [window]),
+        "registered_at": (
+            projects.get(selected_id, {}).get("registered_at")
+            if isinstance(projects.get(selected_id), dict)
+            else None
+        )
+        or utc_now(),
     }
-    if not existing_activation:
-        projects[selected_id]["windows"] = [window]
     write_json(activation_path(home), config)
     append_event(
         runner_events_path(home),
@@ -628,6 +652,15 @@ def load_project_state(home: Path, project_id: str) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def load_project_schedule(home: Path, project_id: str) -> Dict[str, Any]:
+    if load_project(home, project_id) is None:
+        raise ValueError(f"未知项目：{project_id}")
+    value = read_yaml(project_schedule_path(home, project_id))
+    if value is None:
+        raise ValueError(f"项目缺少 schedule.yaml：{project_id}")
+    return scheduler.validate_project_schedule(value)
+
+
 def read_text(path: Path, limit: int = 500_000) -> str:
     try:
         data = path.read_bytes()
@@ -655,20 +688,16 @@ def append_human_message(path: Path, title: str, text: str) -> None:
 
 
 def update_project_control(home: Path, project_id: str, action: str) -> None:
-    config = ensure_home(home)
-    projects = config.get("projects", {})
-    if project_id not in projects:
-        raise ValueError(f"未知项目：{project_id}")
-    entry = projects[project_id]
+    schedule = load_project_schedule(home, project_id)
     if action == "pause":
-        entry["paused"] = True
+        schedule["paused"] = True
     elif action == "resume":
-        entry["paused"] = False
+        schedule["paused"] = False
     elif action == "run":
-        entry["force_run"] = True
+        schedule["force_run"] = True
     else:
         raise ValueError(f"未知控制动作：{action}")
-    write_json(activation_path(home), config)
+    write_yaml(project_schedule_path(home, project_id), schedule)
     append_event(
         runner_events_path(home),
         "project_control",
@@ -677,34 +706,39 @@ def update_project_control(home: Path, project_id: str, action: str) -> None:
     )
 
 
-def set_project_windows(home: Path, project_id: str, windows: List[str]) -> None:
-    if not windows:
-        raise ValueError("至少需要一个时间窗口")
-    normalized = [validate_window(str(window).strip()) for window in windows]
-    config = ensure_home(home)
-    projects = config.get("projects", {})
-    if project_id not in projects:
+def set_project_schedule(
+    home: Path,
+    project_id: str,
+    crons: List[str],
+    timezone_name: Optional[str] = None,
+) -> None:
+    if load_project(home, project_id) is None:
         raise ValueError(f"未知项目：{project_id}")
-    projects[project_id]["windows"] = normalized
-    write_json(activation_path(home), config)
+    try:
+        raw = read_yaml(project_schedule_path(home, project_id), {})
+    except ValueError:
+        raw = {}
+    schedule = dict(raw) if isinstance(raw, dict) else {}
+    schedule["cron"] = crons
+    if timezone_name is not None:
+        schedule["timezone"] = timezone_name
+    normalized = scheduler.validate_project_schedule(schedule)
+    write_yaml(project_schedule_path(home, project_id), normalized)
     append_event(
         runner_events_path(home),
-        "project_windows_updated",
+        "project_schedule_updated",
         project_id=project_id,
-        windows=normalized,
+        cron=normalized["cron"],
+        timezone=normalized["timezone"],
     )
 
 
-def consume_project_force_flags(
-    home: Path, project_ids: Iterable[str]
-) -> None:
-    config = ensure_home(home)
-    changed = False
-    projects = config.get("projects", {})
+def consume_project_force_flags(home: Path, project_ids: Iterable[str]) -> None:
     for project_id in project_ids:
-        entry = projects.get(project_id)
-        if isinstance(entry, dict) and entry.get("force_run"):
-            entry["force_run"] = False
-            changed = True
-    if changed:
-        write_json(activation_path(home), config)
+        try:
+            schedule = load_project_schedule(home, project_id)
+        except ValueError:
+            continue
+        if schedule.get("force_run"):
+            schedule["force_run"] = False
+            write_yaml(project_schedule_path(home, project_id), schedule)

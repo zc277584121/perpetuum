@@ -27,9 +27,14 @@ def agent_command(kind: str) -> List[str]:
     return [executable, *AGENT_ARGUMENTS[kind]]
 
 
-def session_name(role: str) -> str:
+def session_name(role: str, identity: Optional[str] = None) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    return f"perpetuum-{role}-{stamp}-{secrets.token_hex(3)}"
+    suffix = ""
+    if identity:
+        safe_identity = re.sub(r"[^a-zA-Z0-9_-]+", "-", identity).strip("-_")
+        if safe_identity:
+            suffix = f"-{safe_identity[:32]}"
+    return f"perpetuum-{role}{suffix}-{stamp}-{secrets.token_hex(3)}"
 
 
 def session_exists(name: str) -> bool:
@@ -45,11 +50,12 @@ def session_exists(name: str) -> bool:
 
 
 def is_owned_top_session(name: str, role: str) -> bool:
-    if role not in {"root", "reporter"}:
+    if role not in {"project", "reporter"}:
         return False
+    identity = r"-[A-Za-z0-9_-]{1,32}" if role == "project" else ""
     return bool(
         re.fullmatch(
-            rf"perpetuum-{role}-\d{{8}}-\d{{6}}-[0-9a-f]{{6}}",
+            rf"perpetuum-{role}{identity}-\d{{8}}-\d{{6}}-[0-9a-f]{{6}}",
             name,
         )
     )

@@ -21,15 +21,16 @@ class StorageTests(unittest.TestCase):
                 project,
                 name="测试项目",
                 agent="codex",
-                window="00:00-06:00",
+                crons=["*/5 0-5 * * *"],
+                timezone_name="Asia/Shanghai",
             )
             harness = storage.project_dir(home, project_id)
 
             self.assertTrue((home / "activation.yaml").is_file())
             self.assertTrue((harness / "project.yaml").is_file())
+            self.assertTrue((harness / "schedule.yaml").is_file())
             self.assertTrue((harness / "goal.md").is_file())
             self.assertTrue((harness / "stories").is_dir())
-            self.assertFalse((harness / "plan.md").exists())
             self.assertTrue((harness / "history.md").is_file())
             self.assertTrue((harness / "inbox.md").is_file())
             self.assertTrue((harness / "questions.md").is_file())
@@ -39,16 +40,19 @@ class StorageTests(unittest.TestCase):
             self.assertTrue((harness / "runtime" / "events.log").is_file())
 
             runtime = storage.read_json(harness / "runtime" / "state.json")
-            self.assertEqual(runtime["version"], 2)
+            self.assertEqual(runtime["version"], 1)
             self.assertIsNone(runtime["current_story"])
 
             activation = json.loads((home / "activation.yaml").read_text())
             project_config = json.loads((harness / "project.yaml").read_text())
             self.assertEqual(project_config["agent"], {"kind": "codex"})
+            schedule = storage.load_project_schedule(home, project_id)
             self.assertEqual(
-                activation["projects"][project_id]["windows"],
-                ["00:00-06:00"],
+                schedule["cron"],
+                ["*/5 0-5 * * *"],
             )
+            self.assertEqual(schedule["timezone"], "Asia/Shanghai")
+            self.assertIn("registered_at", activation["projects"][project_id])
 
     def test_human_message_is_appended(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -136,7 +140,7 @@ class StorageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "文件名"):
                 storage.list_stories(home, project_id)
 
-    def test_project_windows_can_be_updated(self):
+    def test_project_schedule_can_be_updated(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home = root / "home"
@@ -144,17 +148,19 @@ class StorageTests(unittest.TestCase):
             project.mkdir()
             project_id = storage.register_project(home, project)
 
-            storage.set_project_windows(
+            storage.set_project_schedule(
                 home,
                 project_id,
-                ["00:00-06:00", "18:00-24:00"],
+                ["*/5 0-5 * * *", "0 18 * * 1-5"],
+                "UTC",
             )
 
-            activation = storage.read_json(home / "activation.yaml")
+            schedule = storage.load_project_schedule(home, project_id)
             self.assertEqual(
-                activation["projects"][project_id]["windows"],
-                ["00:00-06:00", "18:00-24:00"],
+                schedule["cron"],
+                ["*/5 0-5 * * *", "0 18 * * 1-5"],
             )
+            self.assertEqual(schedule["timezone"], "UTC")
 
     def test_claude_environment_takes_priority(self):
         with mock.patch.dict(

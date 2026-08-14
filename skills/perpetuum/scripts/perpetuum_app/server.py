@@ -18,6 +18,16 @@ from . import storage
 
 PROJECT_PATH = re.compile(r"^/api/projects/([^/]+)(?:/(inbox|response|control))?$")
 STORY_PATH = re.compile(r"^/api/projects/([^/]+)/stories(?:/([^/]+))?$")
+DOCUMENT_PATH = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)$")
+PROJECT_DOCUMENTS = {
+    "goal": ("goal.md", 100_000),
+    "history": ("history.md", 200_000),
+    "inbox": ("inbox.md", 100_000),
+    "questions": ("questions.md", 100_000),
+    "escalations": ("escalations.md", 100_000),
+    "report": ("reports/latest.md", 100_000),
+    "events": ("runtime/events.log", 200_000),
+}
 
 
 def process_alive(pid: Any) -> bool:
@@ -30,14 +40,31 @@ def process_alive(pid: Any) -> bool:
         return False
 
 
-def project_summary(home: Path, project_id: str, activation: Dict[str, Any]) -> Dict[str, Any]:
+def project_summary(
+    home: Path,
+    project_id: str,
+    runner_state: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     project = storage.load_project(home, project_id) or {}
     state = storage.load_project_state(home, project_id)
-    latest_report = storage.read_text(
-        storage.project_dir(home, project_id) / "reports" / "latest.md",
-        limit=50_000,
+    try:
+        schedule = storage.load_project_schedule(home, project_id)
+    except ValueError as exc:
+        schedule = {
+            "version": 1,
+            "timezone": "",
+            "enabled": False,
+            "paused": True,
+            "force_run": False,
+            "cron": [],
+            "error": str(exc),
+        }
+    active_projects = (runner_state or {}).get("active_projects", {})
+    active = (
+        active_projects.get(project_id)
+        if isinstance(active_projects, dict)
+        else None
     )
-    entry = activation.get("projects", {}).get(project_id, {})
     return {
         "id": project_id,
         "name": project.get("name", project_id),
@@ -48,11 +75,32 @@ def project_summary(home: Path, project_id: str, activation: Dict[str, Any]) -> 
         "story_phase": state.get("story_phase"),
         "last_activity_at": state.get("last_activity_at"),
         "last_result": state.get("last_result"),
-        "paused": bool(entry.get("paused", False)),
-        "enabled": bool(entry.get("enabled", True)),
-        "windows": entry.get("windows", []),
-        "latest_report": latest_report,
+        "paused": bool(schedule.get("paused", False)),
+        "enabled": bool(schedule.get("enabled", True)),
+        "schedule": schedule,
+        "project_session": active.get("session") if isinstance(active, dict) else None,
     }
+
+
+def section_content(markdown: str, heading: str) -> str:
+    lines = markdown.replace("\r\n", "\n").split("\n")
+    marker = f"## {heading}"
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip() == marker)
+    except StopIteration:
+        return ""
+    result = []
+    for line in lines[start + 1 :]:
+        if re.match(r"^#{1,2}\s+", line):
+            break
+        result.append(line)
+    return "\n".join(result).strip()
+
+
+def has_pending_content(markdown: str, heading: str) -> bool:
+    content = section_content(markdown, heading)
+    normalized = re.sub(r"[-*#`\s]", "", content.replace("暂无。", "").replace("暂无", ""))
+    return bool(normalized)
 
 
 def global_status(home: Path) -> Dict[str, Any]:
@@ -64,7 +112,7 @@ def global_status(home: Path) -> Dict[str, Any]:
     service = runner_state.get("service", {})
     service["alive"] = process_alive(service.get("pid"))
     projects = [
-        project_summary(home, project_id, activation)
+        project_summary(home, project_id, runner_state)
         for project_id in storage.list_project_ids(home)
     ]
     return {
@@ -80,26 +128,41 @@ def project_detail(home: Path, project_id: str) -> Dict[str, Any]:
     if project_id not in activation.get("projects", {}):
         raise KeyError(project_id)
     harness = storage.project_dir(home, project_id)
-    files = {}
-    for name in (
-        "goal.md",
-        "history.md",
-        "inbox.md",
-        "questions.md",
-        "escalations.md",
-    ):
-        files[name] = storage.read_text(harness / name)
-    files["reports/latest.md"] = storage.read_text(harness / "reports" / "latest.md")
-    files["runtime/events.log"] = storage.read_text(
-        harness / "runtime" / "events.log",
-        limit=200_000,
-    )
+    questions = storage.read_text(harness / "questions.md", limit=100_000)
+    escalations = storage.read_text(harness / "escalations.md", limit=100_000)
     return {
-        "summary": project_summary(home, project_id, activation),
+        "summary": project_summary(
+            home,
+            project_id,
+            storage.read_json(
+                storage.runner_state_path(home),
+                storage.default_runner_state(),
+            ),
+        ),
         "project": storage.load_project(home, project_id),
         "runtime": storage.load_project_state(home, project_id),
         "stories": storage.list_stories(home, project_id),
-        "files": files,
+        "attention": {
+            "questions": has_pending_content(questions, "待人类回答"),
+            "escalations": has_pending_content(escalations, "待处理"),
+        },
+    }
+
+
+def project_document(home: Path, project_id: str, key: str) -> Dict[str, str]:
+    if storage.load_project(home, project_id) is None:
+        raise KeyError(project_id)
+    definition = PROJECT_DOCUMENTS.get(key)
+    if definition is None:
+        raise ValueError(f"未知项目文档：{key}")
+    relative_path, limit = definition
+    return {
+        "key": key,
+        "path": relative_path,
+        "content": storage.read_text(
+            storage.project_dir(home, project_id) / relative_path,
+            limit=limit,
+        ),
     }
 
 
@@ -118,7 +181,7 @@ def handler_factory(home: Path) -> Any:
     static_root = Path(__file__).resolve().parent / "frontend"
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "Perpetuum/0.2"
+        server_version = "Perpetuum/0.3"
 
         def log_message(self, format_string: str, *args: Any) -> None:
             del format_string, args
@@ -139,6 +202,21 @@ def handler_factory(home: Path) -> Any:
             parsed = urlparse(self.path)
             if parsed.path == "/api/status":
                 self.send_json(global_status(home))
+                return
+            document_match = DOCUMENT_PATH.fullmatch(parsed.path)
+            if document_match:
+                try:
+                    self.send_json(
+                        project_document(
+                            home,
+                            unquote(document_match.group(1)),
+                            unquote(document_match.group(2)),
+                        )
+                    )
+                except KeyError:
+                    self.send_error_json(HTTPStatus.NOT_FOUND, "项目不存在")
+                except ValueError as exc:
+                    self.send_error_json(HTTPStatus.NOT_FOUND, str(exc))
                 return
             story_match = STORY_PATH.fullmatch(parsed.path)
             if story_match and story_match.group(2):
@@ -254,11 +332,17 @@ def handler_factory(home: Path) -> Any:
                     )
                 elif action == "control":
                     control_action = str(body.get("action", ""))
-                    if control_action == "window":
-                        windows = body.get("windows", [])
-                        if not isinstance(windows, list):
-                            raise ValueError("时间窗口必须是列表")
-                        storage.set_project_windows(home, project_id, windows)
+                    if control_action == "schedule":
+                        crons = body.get("cron", [])
+                        if not isinstance(crons, list):
+                            raise ValueError("cron 必须是列表")
+                        timezone_name = body.get("timezone")
+                        storage.set_project_schedule(
+                            home,
+                            project_id,
+                            crons,
+                            str(timezone_name) if timezone_name else None,
+                        )
                     else:
                         storage.update_project_control(
                             home,

@@ -195,11 +195,14 @@ def stop_service(home: Path, force: bool) -> int:
             return 0
         time.sleep(0.25)
     state = load_state(home)
-    active = state.get("active_root") or state.get("active_reporter")
-    if active:
+    active_projects = state.get("active_projects", {})
+    active_reporter = state.get("active_reporter")
+    if active_projects or active_reporter:
+        count = len(active_projects) if isinstance(active_projects, dict) else 0
+        count += int(bool(active_reporter))
         print(
             "Perpetuum 正在等待当前顶层工作完成，之后会自动停止。"
-            f" 当前 session：{active.get('session', 'unknown')}"
+            f" 当前活跃链路：{count}"
         )
     else:
         print("已提交停止请求，服务将在下一次心跳退出。")
@@ -220,11 +223,14 @@ def restart_service(home: Path, host: Optional[str], port: Optional[int]) -> int
         changes["port"] = port
     update_service_config(home, **changes)
     state = load_state(home)
-    active = state.get("active_root") or state.get("active_reporter")
-    if active:
+    active_projects = state.get("active_projects", {})
+    active_reporter = state.get("active_reporter")
+    if active_projects or active_reporter:
+        count = len(active_projects) if isinstance(active_projects, dict) else 0
+        count += int(bool(active_reporter))
         print(
             "已请求重启。服务会等待当前顶层工作完成后原地重启；"
-            f"当前 session：{active.get('session', 'unknown')}"
+            f"当前活跃链路：{count}"
         )
     else:
         print("已请求重启，服务将在下一次心跳原地重启。")
@@ -242,9 +248,9 @@ def print_status(home: Path, as_json: bool) -> int:
     if alive:
         print(f"PID：{service.get('pid')}")
         print(f"前端：{service.get('url')}")
-    active_root = status["runner"].get("active_root")
+    active_projects = status["runner"].get("active_projects", {})
     active_reporter = status["runner"].get("active_reporter")
-    print(f"Root：{active_root.get('session') if active_root else '无'}")
+    print(f"Project Supervisor：{len(active_projects)} 个活跃")
     print(f"Reporter：{active_reporter.get('session') if active_reporter else '无'}")
     print(f"项目数：{len(status['projects'])}")
     for project in status["projects"]:
@@ -266,7 +272,8 @@ def project_add(args: argparse.Namespace, home: Path) -> int:
             name=args.name,
             project_id=args.id,
             agent=args.agent,
-            window=args.window,
+            crons=args.cron,
+            timezone_name=args.timezone,
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
@@ -277,11 +284,10 @@ def project_add(args: argparse.Namespace, home: Path) -> int:
 
 
 def project_list(home: Path, as_json: bool) -> int:
-    activation = storage.ensure_home(home)
     projects = [
         {
             "project": storage.load_project(home, project_id),
-            "activation": activation.get("projects", {}).get(project_id, {}),
+            "schedule": storage.load_project_schedule(home, project_id),
             "runtime": storage.load_project_state(home, project_id),
         }
         for project_id in storage.list_project_ids(home)
@@ -294,14 +300,15 @@ def project_list(home: Path, as_json: bool) -> int:
         return 0
     for item in projects:
         project = item["project"] or {}
-        activation_entry = item["activation"]
+        schedule = item["schedule"]
         state = item["runtime"]
-        paused = "，已暂停" if activation_entry.get("paused") else ""
+        paused = "，已暂停" if schedule.get("paused") else ""
         print(
             f"{project.get('id')}: {project.get('name')} · "
             f"{state.get('status', 'unknown')}{paused}\n"
             f"  {project.get('path')}\n"
-            f"  时间窗口：{', '.join(activation_entry.get('windows', []))}"
+            f"  时区：{schedule.get('timezone', 'unknown')}\n"
+            f"  Cron：{', '.join(schedule.get('cron', []))}"
         )
     return 0
 
@@ -317,13 +324,27 @@ def project_control(home: Path, project_id: str, action: str) -> int:
     return 0
 
 
-def project_window(home: Path, project_id: str, windows: Any) -> int:
+def project_schedule(
+    home: Path,
+    project_id: str,
+    crons: Any,
+    timezone_name: Optional[str],
+) -> int:
     try:
-        storage.set_project_windows(home, project_id, list(windows))
+        storage.set_project_schedule(
+            home,
+            project_id,
+            list(crons),
+            timezone_name,
+        )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    print(f"已更新时间窗口：{project_id} · {', '.join(windows)}")
+    schedule = storage.load_project_schedule(home, project_id)
+    print(
+        f"已更新运行计划：{project_id} · {schedule['timezone']} · "
+        f"{', '.join(schedule['cron'])}"
+    )
     return 0
 
 
@@ -505,7 +526,13 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--id")
     add.add_argument("--name")
     add.add_argument("--agent", choices=("codex", "claude"))
-    add.add_argument("--window", default="00:00-24:00")
+    add.add_argument("--timezone", default="Asia/Shanghai")
+    add.add_argument(
+        "--cron",
+        action="append",
+        required=True,
+        help="标准五字段 cron；需要多个计划时重复传入",
+    )
 
     list_parser = project_subparsers.add_parser("list", help="列出项目")
     list_parser.add_argument("--json", action="store_true")
@@ -518,9 +545,10 @@ def build_parser() -> argparse.ArgumentParser:
         action_parser = project_subparsers.add_parser(action, help=help_text)
         action_parser.add_argument("project_id")
 
-    window = project_subparsers.add_parser("window", help="设置项目时间窗口")
-    window.add_argument("project_id")
-    window.add_argument("windows", nargs="+", help="例如 00:00-06:00")
+    schedule = project_subparsers.add_parser("schedule", help="设置项目 cron 计划")
+    schedule.add_argument("project_id")
+    schedule.add_argument("crons", nargs="+", help="标准五字段 cron，参数需要加引号")
+    schedule.add_argument("--timezone")
 
     story = subparsers.add_parser("story", help="管理 Story 看板")
     story_subparsers = story.add_subparsers(dest="story_command", required=True)
@@ -587,8 +615,15 @@ def main() -> None:
             raise SystemExit(project_add(args, home))
         if args.project_command == "list":
             raise SystemExit(project_list(home, args.json))
-        if args.project_command == "window":
-            raise SystemExit(project_window(home, args.project_id, args.windows))
+        if args.project_command == "schedule":
+            raise SystemExit(
+                project_schedule(
+                    home,
+                    args.project_id,
+                    args.crons,
+                    args.timezone,
+                )
+            )
         raise SystemExit(
             project_control(home, args.project_id, args.project_command)
         )

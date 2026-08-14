@@ -17,7 +17,7 @@ stories/
 └── S-20260814-003.md
 ```
 
-`stories/*.md` 是 Story 状态、优先级、摘要和正文的唯一事实来源。新 Harness 不使用 `plan.md`，前端直接根据 Story 文件生成看板。取消或失效使用 `status: cancelled`，不要物理删除文件。
+`stories/*.md` 是 Story 状态、优先级、摘要和正文的唯一事实来源，前端直接根据这些文件生成看板。取消或失效使用 `status: cancelled`，不要物理删除文件。
 
 ## Front matter
 

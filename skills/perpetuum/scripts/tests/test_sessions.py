@@ -10,6 +10,26 @@ from perpetuum_app import sessions
 
 @unittest.skipUnless(shutil.which("tmux"), "tmux is required")
 class SessionTests(unittest.TestCase):
+    def test_top_level_ownership_only_accepts_project_and_reporter_names(self):
+        self.assertTrue(
+            sessions.is_owned_top_session(
+                "perpetuum-project-demo-20260812-120000-a1b2c3",
+                "project",
+            )
+        )
+        self.assertTrue(
+            sessions.is_owned_top_session(
+                "perpetuum-reporter-20260812-120000-a1b2c3",
+                "reporter",
+            )
+        )
+        self.assertFalse(
+            sessions.is_owned_top_session(
+                "perpetuum-root-20260812-120000-a1b2c3",
+                "root",
+            )
+        )
+
     def test_agent_commands_use_resolved_binaries_and_unattended_flags(self):
         binaries = {
             "codex": "/opt/bin/codex",

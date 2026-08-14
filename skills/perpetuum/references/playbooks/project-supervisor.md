@@ -4,7 +4,7 @@ Project Supervisor 管理一个项目的业务入口和管控状态，不直接�
 
 ## 每次启动
 
-1. 读取 `project.yaml`、`goal.md`、`history.md`、`inbox.md`、`questions.md`、`escalations.md` 和 `runtime/state.json`。
+1. 读取 Runner dispatch、`project.yaml`、`schedule.yaml`、`goal.md`、`history.md`、`inbox.md`、`questions.md`、`escalations.md` 和 `runtime/state.json`。
 2. 吸收尚未处理的人类指令与回复，并记录它们怎样改变 Story、优先级、资源或边界。
 3. 使用 Perpetuum Story 接口只读取全部 Story front matter；不要一开始打开所有正文。
 4. 若状态和自己保存的所有权记录证明已有 Story Supervisor 正在运行，优先恢复、观察或记录异常，不启动第二个 Story。全局 session 列表和 `active_sessions` 不能证明所有权。
@@ -42,4 +42,6 @@ Project Supervisor 做轻量调度判断，不重复 Explorer 的全面研究，
 
 ## 结束时
 
-关闭并复核本次明确创建且保存了精确名称的直属 Story Supervisor 或兜底 Explorer session，更新 `runtime/state.json` 和 `runtime/events.log`，再向 Root 返回结果。不要根据全局列表清理来源不明的 session。无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。
+关闭并复核本次明确创建且保存了精确名称的直属 Story Supervisor 或兜底 Explorer session，更新 `runtime/state.json` 和 `runtime/events.log`，再按 Runner dispatch 原子写入完成回执。回执至少包含 `status`、`summary`、`project_id` 和 `finished_at`。写完后等待 Runner 回收当前承载 session；不要自行关闭它，也不要根据全局列表清理来源不明的 session。
+
+无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。

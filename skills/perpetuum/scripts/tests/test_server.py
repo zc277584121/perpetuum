@@ -6,10 +6,24 @@ from urllib.request import Request
 from urllib.request import urlopen
 
 from perpetuum_app import storage
-from perpetuum_app.server import RuntimeServer
+from perpetuum_app.server import RuntimeServer, has_pending_content
 
 
 class ServerTests(unittest.TestCase):
+    def test_attention_summary_reads_pending_section(self):
+        self.assertFalse(
+            has_pending_content(
+                "# 业务问题\n\n## 待人类回答\n\n暂无。\n\n## 已吸收\n",
+                "待人类回答",
+            )
+        )
+        self.assertTrue(
+            has_pending_content(
+                "# 业务问题\n\n## 待人类回答\n\nQ-1：请选择数据范围。\n\n## 已吸收\n",
+                "待人类回答",
+            )
+        )
+
     def test_status_and_project_detail(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -34,14 +48,29 @@ class ServerTests(unittest.TestCase):
                 with urlopen(f"http://127.0.0.1:{port}/api/status") as response:
                     status = json.loads(response.read())
                 self.assertEqual(status["projects"][0]["id"], project_id)
+                self.assertNotIn("latest_report", status["projects"][0])
+                self.assertEqual(
+                    status["projects"][0]["schedule"]["cron"],
+                    ["0 0 * * *"],
+                )
 
                 with urlopen(
                     f"http://127.0.0.1:{port}/api/projects/{project_id}"
                 ) as response:
                     detail = json.loads(response.read())
-                self.assertIn("goal.md", detail["files"])
-                self.assertNotIn("plan.md", detail["files"])
                 self.assertEqual(detail["stories"][0]["id"], story_id)
+                self.assertNotIn("files", detail)
+                self.assertEqual(
+                    detail["attention"],
+                    {"questions": False, "escalations": False},
+                )
+
+                with urlopen(
+                    f"http://127.0.0.1:{port}/api/projects/{project_id}/documents/goal"
+                ) as response:
+                    goal = json.loads(response.read())
+                self.assertEqual(goal["path"], "goal.md")
+                self.assertIn("长期目标", goal["content"])
 
                 with urlopen(
                     f"http://127.0.0.1:{port}/api/projects/{project_id}/stories/{story_id}"
@@ -87,8 +116,27 @@ class ServerTests(unittest.TestCase):
                 with urlopen(request) as response:
                     result = json.loads(response.read())
                 self.assertTrue(result["ok"])
-                activation = storage.read_json(home / "activation.yaml")
-                self.assertTrue(activation["projects"][project_id]["paused"])
+                schedule = storage.load_project_schedule(home, project_id)
+                self.assertTrue(schedule["paused"])
+
+                request = Request(
+                    f"http://127.0.0.1:{port}/api/projects/{project_id}/control",
+                    data=json.dumps(
+                        {
+                            "action": "schedule",
+                            "timezone": "UTC",
+                            "cron": ["*/15 * * * *"],
+                        }
+                    ).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(request) as response:
+                    result = json.loads(response.read())
+                self.assertTrue(result["ok"])
+                schedule = storage.load_project_schedule(home, project_id)
+                self.assertEqual(schedule["timezone"], "UTC")
+                self.assertEqual(schedule["cron"], ["*/15 * * * *"])
             finally:
                 server.stop()
 

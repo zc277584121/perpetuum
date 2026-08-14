@@ -8,43 +8,48 @@ from perpetuum_app.runner import Runner
 
 
 class RunnerTests(unittest.TestCase):
-    def make_project(self, root):
+    def make_project(self, root, name="project"):
         home = root / "home"
-        project = root / "project"
+        project = root / name
         project.mkdir()
         project_id = storage.register_project(
             home,
             project,
-            name="测试项目",
+            name=name,
             agent="codex",
+            crons=["* * * * *"],
         )
         return home, project_id
 
-    def test_receipt_completes_top_session_without_screen_parsing(self):
+    def test_receipt_completes_project_session_without_screen_parsing(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home, project_id = self.make_project(root)
             runner = Runner(home)
-            payloads = runner.project_payloads([project_id])
-            run_dir, dispatch, receipt, run_id = runner.create_dispatch(
-                "root",
-                payloads,
-                "perpetuum-root-20260812-120000-a1b2c3",
+            project = runner.project_payload(project_id)
+            session = f"perpetuum-project-{project_id[:32]}-20260812-120000-a1b2c3"
+            run_dir, dispatch, receipt, run_id = runner.create_run(
+                "project",
+                session,
+                {
+                    "project": project,
+                    "trigger": {"reason": "manual", "triggered_at": storage.utc_now()},
+                },
             )
             storage.write_json(
                 receipt,
                 {
                     "status": "completed",
                     "summary": "完成",
-                    "projects": [project_id],
+                    "project_id": project_id,
                     "finished_at": storage.utc_now(),
                 },
             )
-            runner.state["active_root"] = {
-                "role": "root",
+            active = {
+                "role": "project",
                 "run_id": run_id,
-                "session": "perpetuum-root-20260805-120000-a1b2c3",
-                "project_ids": [project_id],
+                "session": session,
+                "project_id": project_id,
                 "dispatch_path": str(dispatch),
                 "receipt_path": str(receipt),
                 "run_dir": str(run_dir),
@@ -54,46 +59,40 @@ class RunnerTests(unittest.TestCase):
                 "perpetuum_app.runner.sessions.session_exists",
                 return_value=True,
             ), mock.patch("perpetuum_app.runner.sessions.kill_session") as kill:
-                runner.reconcile_active(
-                    "active_root",
+                completed = runner.reconcile_active(
+                    active,
+                    [project_id],
                     storage.ensure_home(home),
                 )
 
-            self.assertIsNone(runner.state["active_root"])
+            self.assertTrue(completed)
             self.assertFalse(run_dir.exists())
-            kill.assert_called_once_with("perpetuum-root-20260805-120000-a1b2c3")
+            kill.assert_called_once_with(session)
 
-    def test_dispatch_uses_role_playbooks_subdirectory(self):
+    def test_project_dispatch_only_exposes_relevant_playbooks(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home, project_id = self.make_project(root)
             runner = Runner(home)
-            payloads = runner.project_payloads([project_id])
-            _run_dir, dispatch_path, _receipt, _run_id = runner.create_dispatch(
-                "root",
-                payloads,
-                "perpetuum-root-20260812-120000-a1b2c3",
+            project = runner.project_payload(project_id)
+            session = f"perpetuum-project-{project_id[:32]}-20260812-120000-a1b2c3"
+            _run_dir, dispatch_path, _receipt, _run_id = runner.create_run(
+                "project",
+                session,
+                {
+                    "project": project,
+                    "trigger": {"reason": "manual", "triggered_at": storage.utc_now()},
+                },
             )
 
             dispatch = storage.read_json(dispatch_path)
-            self.assertEqual(
-                dispatch["carrier_session"],
-                "perpetuum-root-20260812-120000-a1b2c3",
-            )
-            for key in (
-                "root_supervisor",
-                "project_supervisor",
-                "story_supervisor",
-                "explorer",
-                "executor",
-                "validator",
-                "reporter",
-            ):
-                playbook = Path(dispatch["references"][key])
-                self.assertEqual(playbook.parent.name, "playbooks")
-                self.assertTrue(playbook.is_file())
+            self.assertEqual(dispatch["carrier_session"], session)
+            self.assertEqual(dispatch["project"]["id"], project_id)
+            self.assertIn("project_supervisor", dispatch["references"])
+            self.assertIn("story_supervisor", dispatch["references"])
+            self.assertNotIn("root_supervisor", dispatch["references"])
 
-    def test_project_payload_ignores_legacy_agent_command(self):
+    def test_project_payload_ignores_agent_command_field(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home, project_id = self.make_project(root)
@@ -102,11 +101,11 @@ class RunnerTests(unittest.TestCase):
             project["agent"]["command"] = "codex --unexpected"
             storage.write_json(project_path, project)
 
-            payloads = Runner(home).project_payloads([project_id])
+            payload = Runner(home).project_payload(project_id)
 
-            self.assertEqual(payloads[0]["agent"], {"kind": "codex"})
+            self.assertEqual(payload["agent"], {"kind": "codex"})
 
-    def test_top_level_session_uses_runner_managed_agent_command(self):
+    def test_project_session_uses_runner_managed_interactive_agent(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home, project_id = self.make_project(root)
@@ -116,64 +115,58 @@ class RunnerTests(unittest.TestCase):
                 "--no-alt-screen",
                 "--dangerously-bypass-approvals-and-sandbox",
             ]
+            session = f"perpetuum-project-{project_id[:32]}-20260811-120000-a1b2c3"
 
             with mock.patch(
                 "perpetuum_app.runner.sessions.agent_command",
                 return_value=command,
             ) as build_command, mock.patch(
                 "perpetuum_app.runner.sessions.session_name",
-                return_value="perpetuum-root-20260811-120000-a1b2c3",
+                return_value=session,
             ), mock.patch(
                 "perpetuum_app.runner.sessions.launch_session",
-                return_value="perpetuum-root-20260811-120000-a1b2c3",
+                return_value=session,
             ) as launch:
-                active = runner.launch_top_level(
-                    "root",
-                    [project_id],
+                active = runner.launch_project(
+                    project_id,
+                    {"reason": "manual", "triggered_at": storage.utc_now()},
                     storage.ensure_home(home),
                 )
 
             self.assertIsNotNone(active)
             build_command.assert_called_once_with("codex")
             self.assertEqual(launch.call_args.kwargs["command"], command)
-            self.assertEqual(
-                launch.call_args.kwargs["name"],
-                "perpetuum-root-20260811-120000-a1b2c3",
-            )
+            self.assertEqual(launch.call_args.kwargs["role"], "project")
+            self.assertEqual(launch.call_args.kwargs["name"], session)
 
-    def test_top_level_prompt_is_single_activation_with_cleanup_contract(self):
+    def test_project_prompt_has_hard_envelope_and_soft_story_decision(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home, project_id = self.make_project(root)
             runner = Runner(home)
-            payloads = runner.project_payloads([project_id])
-            _run_dir, dispatch, receipt, _run_id = runner.create_dispatch(
-                "reporter",
-                payloads,
-                "perpetuum-reporter-20260812-120000-a1b2c3",
+            project = runner.project_payload(project_id)
+            prompt = runner.build_project_prompt(
+                Path("/tmp/dispatch.json"),
+                Path("/tmp/receipt.json"),
+                "perpetuum-project-demo-20260812-120000-a1b2c3",
+                project,
+                {
+                    "reason": "cron",
+                    "matched_cron": "*/5 0-5 * * *",
+                    "triggered_at": storage.utc_now(),
+                },
             )
 
-            prompt = runner.build_prompt(
-                "reporter",
-                dispatch,
-                receipt,
-                "perpetuum-reporter-20260812-120000-a1b2c3",
-            )
-
-            cleanup = prompt.index("直属子 session 全部关闭")
-            write_receipt = prompt.index("原子写入")
-            self.assertLess(cleanup, write_receipt)
-            self.assertIn("这是一次新的独立激活", prompt)
-            self.assertIn("不要因为时间经过", prompt)
-            self.assertIn("角色 Playbook", prompt)
-            self.assertIn(
-                "当前承载 session：perpetuum-reporter-20260812-120000-a1b2c3",
-                prompt,
-            )
-            self.assertIn("不能证明所有权", prompt)
+            self.assertIn("Project Supervisor", prompt)
+            self.assertIn("通过当前安装的 cc-use Skill", prompt)
+            self.assertIn("本轮最多推进一张 Story", prompt)
+            self.assertIn("当前承载 session", prompt)
+            self.assertIn("原子写入", prompt)
+            self.assertIn("决定本轮是否值得推进", prompt)
             self.assertNotIn("cc-use finish", prompt)
+            self.assertNotIn("codex exec", prompt)
 
-    def test_missing_agent_binary_becomes_control_escalation(self):
+    def test_missing_agent_binary_becomes_project_escalation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home, project_id = self.make_project(root)
@@ -183,9 +176,9 @@ class RunnerTests(unittest.TestCase):
                 "perpetuum_app.runner.sessions.agent_command",
                 side_effect=RuntimeError("codex executable not found"),
             ):
-                active = runner.launch_top_level(
-                    "root",
-                    [project_id],
+                active = runner.launch_project(
+                    project_id,
+                    {"reason": "manual", "triggered_at": storage.utc_now()},
                     storage.ensure_home(home),
                 )
 
@@ -193,7 +186,7 @@ class RunnerTests(unittest.TestCase):
             escalation = (
                 storage.project_dir(home, project_id) / "escalations.md"
             ).read_text()
-            self.assertIn("无法启动 root session", escalation)
+            self.assertIn("无法启动 Project Supervisor session", escalation)
             self.assertIn("codex executable not found", escalation)
 
     def test_missing_receipt_creates_control_escalation(self):
@@ -201,17 +194,21 @@ class RunnerTests(unittest.TestCase):
             root = Path(directory)
             home, project_id = self.make_project(root)
             runner = Runner(home)
-            payloads = runner.project_payloads([project_id])
-            run_dir, dispatch, receipt, run_id = runner.create_dispatch(
-                "root",
-                payloads,
-                "perpetuum-root-20260812-120000-a1b2c3",
+            project = runner.project_payload(project_id)
+            session = f"perpetuum-project-{project_id[:32]}-20260812-120000-a1b2c3"
+            run_dir, dispatch, receipt, run_id = runner.create_run(
+                "project",
+                session,
+                {
+                    "project": project,
+                    "trigger": {"reason": "manual", "triggered_at": storage.utc_now()},
+                },
             )
-            runner.state["active_root"] = {
-                "role": "root",
+            active = {
+                "role": "project",
                 "run_id": run_id,
-                "session": "lost-session",
-                "project_ids": [project_id],
+                "session": session,
+                "project_id": project_id,
                 "dispatch_path": str(dispatch),
                 "receipt_path": str(receipt),
                 "run_dir": str(run_dir),
@@ -221,17 +218,82 @@ class RunnerTests(unittest.TestCase):
                 "perpetuum_app.runner.sessions.session_exists",
                 return_value=False,
             ):
-                runner.reconcile_active(
-                    "active_root",
+                completed = runner.reconcile_active(
+                    active,
+                    [project_id],
                     storage.ensure_home(home),
                 )
 
+            self.assertTrue(completed)
             escalation = (
                 storage.project_dir(home, project_id) / "escalations.md"
             ).read_text()
             self.assertIn("写入完成回执前消失", escalation)
             state = storage.load_project_state(home, project_id)
             self.assertEqual(state["status"], "control_blocked")
+
+    def test_due_projects_launch_independently_in_same_tick(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, first = self.make_project(root, "first")
+            _home, second = self.make_project(root, "second")
+            runner = Runner(home)
+
+            def active(project_id, trigger, config):
+                del config
+                return {
+                    "role": "project",
+                    "project_id": project_id,
+                    "session": f"session-{project_id}",
+                    "trigger": trigger,
+                }
+
+            with mock.patch.object(
+                runner,
+                "launch_project",
+                side_effect=active,
+            ) as launch, mock.patch(
+                "perpetuum_app.runner.scheduler.report_due",
+                return_value=False,
+            ):
+                runner.tick()
+
+            self.assertEqual(launch.call_count, 2)
+            self.assertEqual(set(runner.state["active_projects"]), {first, second})
+
+    def test_active_project_does_not_block_another_project(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, first = self.make_project(root, "first")
+            _home, second = self.make_project(root, "second")
+            runner = Runner(home)
+            runner.state["active_projects"] = {
+                first: {
+                    "role": "project",
+                    "project_id": first,
+                    "session": f"perpetuum-project-{first[:32]}-20260812-120000-a1b2c3",
+                }
+            }
+
+            with mock.patch.object(
+                runner,
+                "reconcile_projects",
+            ), mock.patch.object(
+                runner,
+                "launch_project",
+                return_value={
+                    "role": "project",
+                    "project_id": second,
+                    "session": "second-session",
+                },
+            ) as launch, mock.patch(
+                "perpetuum_app.runner.scheduler.report_due",
+                return_value=False,
+            ):
+                runner.tick()
+
+            launch.assert_called_once()
+            self.assertEqual(launch.call_args.args[0], second)
 
     def test_corrupt_run_directory_is_not_removed(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -242,23 +304,24 @@ class RunnerTests(unittest.TestCase):
             marker = protected / "keep.txt"
             marker.write_text("keep")
             runner = Runner(home)
-            runner.state["active_root"] = {
-                "role": "root",
+            active = {
+                "role": "project",
                 "run_id": "corrupt",
                 "session": "unrelated-session",
-                "project_ids": [project_id],
+                "project_id": project_id,
                 "dispatch_path": str(protected / "dispatch.json"),
                 "receipt_path": str(protected / "receipt.json"),
                 "run_dir": str(protected),
             }
 
-            runner.reconcile_active(
-                "active_root",
+            completed = runner.reconcile_active(
+                active,
+                [project_id],
                 storage.ensure_home(home),
             )
 
+            self.assertTrue(completed)
             self.assertEqual(marker.read_text(), "keep")
-            self.assertIsNone(runner.state["active_root"])
 
 
 if __name__ == "__main__":
