@@ -45,7 +45,7 @@ Perpetuum 把真实项目目录组织成可长期运行的 Story 看板。本地
 
 ## 核心规则
 
-1. 初始化时先检查项目和可用历史，在对话中形成完整 Goal、队伍契约、第一批 Story 和运行计划。必须询问用户这套 Harness 如何编排角色：Executor 的职责，以及是否启用 Validator、Explorer、各自职责、触发条件、关系和调用顺序。信息不足、相互矛盾或会改变长期行为时继续确认；只有用户明确确认最终内容后才能建立 Harness。
+1. 初始化时先检查项目和可用历史，再通过可多轮的对话与用户共同形成完整 Goal、队伍契约、第一批 Story 和运行计划。用户没有明确指定、也没有明确委托 Agent 决定的长期行为或授权都必须询问；建议、默认值、历史偏好和沉默都不算确认。待决项清零并由用户确认合并后的完整契约后，才能建立 Harness。
 2. `goal.md` 是长期业务契约；`team.md` 是角色启用、职责、触发条件、调用图和完成门槛的唯一事实来源；`stories/*.md` 是 Story 的唯一事实来源；`history.md` 只保存通过已配置完成门槛的结论和重要决定；`schedule.yaml` 是该项目自动启动计划的唯一事实来源。
 3. Runner 只机械解释标准五字段 cron。匹配后，如果该项目没有活动的 Project Supervisor，就创建新的交互式 Codex 或 Claude Code TUI，并发送一次启动 Prompt；已有活动链路时不重复创建，也不重复发送 Prompt。
 4. Project Supervisor 先读取 `team.md` 和 Story front matter，从已有 `in_progress` 或 `ready` Story 中选择一张，再通过 `cc-use` 启动唯一的 Story Supervisor。没有可运行 Story 时，只有 `team.md` 启用 Explorer 且配置了空看板触发点才调用它；否则正常 Idle。
