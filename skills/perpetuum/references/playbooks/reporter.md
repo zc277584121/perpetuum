@@ -6,7 +6,7 @@ Reporter 是独立于各 Project 工作链的每日检查 Agent。它不启动�
 
 每天读取全局 Runner 状态和每个已注册项目的：
 
-- `goal.md`、`history.md`；
+- `goal.md`、`team.md`、`history.md`；
 - 全部 Story front matter；
 - 当前、等待、最近完成或异常 Story 的必要正文；
 - `questions.md`、`escalations.md`；
@@ -23,7 +23,7 @@ Reporter 是独立于各 Project 工作链的每日检查 Agent。它不启动�
 
 1. 面向维护者的摘要：今天是否有实质进展、采取了什么动作、现在是否需要人类处理；
 2. 实际完成内容、可复查证据和产物位置；
-3. 当前 Story 的背景、进展、验证状态和下一步；
+3. 当前 Story 的背景、进展、实际启用角色、验收状态和下一步；
 4. 高优先级 `ready` Story、等待 Story 和最近完成 Story；
 5. Questions，包括建议、不回答时的影响和人类只需回复的最小问题；
 6. Escalations、业务影响和恢复建议；

@@ -30,6 +30,7 @@ class StorageTests(unittest.TestCase):
             self.assertTrue((harness / "project.yaml").is_file())
             self.assertTrue((harness / "schedule.yaml").is_file())
             self.assertTrue((harness / "goal.md").is_file())
+            self.assertTrue((harness / "team.md").is_file())
             self.assertTrue((harness / "stories").is_dir())
             self.assertTrue((harness / "history.md").is_file())
             self.assertTrue((harness / "inbox.md").is_file())
@@ -53,6 +54,7 @@ class StorageTests(unittest.TestCase):
             )
             self.assertEqual(schedule["timezone"], "Asia/Shanghai")
             self.assertIn("registered_at", activation["projects"][project_id])
+            self.assertIn("Executor（必选）", (harness / "team.md").read_text())
 
     def test_human_message_is_appended(self):
         with tempfile.TemporaryDirectory() as directory:

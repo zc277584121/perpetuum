@@ -5,7 +5,7 @@ description: 为一个或多个项目建立、运行和管理长期 Agent 队伍
 
 # Perpetuum
 
-Perpetuum 把真实项目目录组织成可长期运行的 Story 看板。本地 Runner 按每个项目自己的 cron 计划创建临时 Project Supervisor；Project Supervisor 再通过 `cc-use` 调度 Story Supervisor 和下级 Agent。长期 Goal、Story、可信历史、人类输入、运行状态和日报都保存在项目自己的 Harness 中。
+Perpetuum 把真实项目目录组织成可长期运行的 Story 看板。本地 Runner 按每个项目自己的 cron 计划创建临时 Project Supervisor；Project Supervisor 再通过 `cc-use` 调度 Story Supervisor 和下级 Agent。长期 Goal、队伍契约、Story、可信历史、人类输入、运行状态和日报都保存在项目自己的 Harness 中。
 
 ## 依赖
 
@@ -16,10 +16,10 @@ Perpetuum 把真实项目目录组织成可长期运行的 Story 看板。本地
 ## 核心名词
 
 - **Project**：一个需要长期推进的真实项目目录。前端中一个 Project 对应一个 Story 看板页面。
-- **Harness**：Perpetuum 为 Project 保存的 Goal、Story、人类输入、报告、运行计划和状态，默认位于 `~/.perpetuum/projects/<project-id>/`。
+- **Harness**：Perpetuum 为 Project 保存的 Goal、队伍契约、Story、人类输入、报告、运行计划和状态，默认位于 `~/.perpetuum/projects/<project-id>/`。
 - **Runner**：非 Agent 的本地后台服务。它解释 cron、创建顶层交互式 TUI、维护生命周期并提供前端，不做业务判断。
 - **Project Supervisor**：Runner 为某个项目的一次激活创建的临时管理 Agent。它选择至多一张 Story，并通过 `cc-use` 调用 Story Supervisor。
-- **Story Supervisor**：只服务一张 Story，管理 Executor、Validator 和收口后的 Explorer。
+- **Story Supervisor**：只服务一张 Story，是具体任务的 Supervisor；按 `team.md` 调度必选 Executor 和可选的 Validator、Explorer。
 - **Story**：唯一的业务工作粒度。一张卡片对应一个完整、可验证的业务成果和一条连续的 Agent 工作链。
 - **Reporter**：独立的日报 Agent；即使 Project 工作链异常，也会检查并报告运行情况。
 - **session**：由 tmux 承载的交互式 Agent TUI。每个父节点只管理自己明确创建并保存了精确名称的直属 session。
@@ -45,20 +45,20 @@ Perpetuum 把真实项目目录组织成可长期运行的 Story 看板。本地
 
 ## 核心规则
 
-1. 初始化时先检查项目和可用历史，在对话中形成完整契约、第一批 Story 和运行计划。信息不足、相互矛盾或会改变长期行为时继续向用户确认；只有用户明确确认最终内容后才能建立 Harness。
-2. `goal.md` 是长期业务契约；`stories/*.md` 是 Story 的唯一事实来源；`history.md` 只保存已经验证的结论和重要决定；`schedule.yaml` 是该项目自动启动计划的唯一事实来源。
+1. 初始化时先检查项目和可用历史，在对话中形成完整 Goal、队伍契约、第一批 Story 和运行计划。必须询问用户这套 Harness 如何编排角色：Executor 的职责，以及是否启用 Validator、Explorer、各自职责、触发条件、关系和调用顺序。信息不足、相互矛盾或会改变长期行为时继续确认；只有用户明确确认最终内容后才能建立 Harness。
+2. `goal.md` 是长期业务契约；`team.md` 是角色启用、职责、触发条件、调用图和完成门槛的唯一事实来源；`stories/*.md` 是 Story 的唯一事实来源；`history.md` 只保存通过已配置完成门槛的结论和重要决定；`schedule.yaml` 是该项目自动启动计划的唯一事实来源。
 3. Runner 只机械解释标准五字段 cron。匹配后，如果该项目没有活动的 Project Supervisor，就创建新的交互式 Codex 或 Claude Code TUI，并发送一次启动 Prompt；已有活动链路时不重复创建，也不重复发送 Prompt。
-4. Project Supervisor 先读取 Story front matter，从已有 `in_progress` 或 `ready` Story 中选择一张，再通过 `cc-use` 启动唯一的 Story Supervisor。没有可运行 Story 时才调用一次 Explorer 刷新看板。
-5. Story Supervisor 正常只创建一个 Executor 和一个 Validator。Validator 退回后继续使用原 Executor 与原 Validator，直到接受或进入稳定等待状态；不把反馈往返当成新的 Story 循环。
-6. Story 达到完成、等待或管控阻塞的稳定状态后，Story Supervisor 再创建一次全新的 Explorer，根据刚产生的结果增删改后续 Story。取消使用 `cancelled`，不物理删除 Story 文件。
+4. Project Supervisor 先读取 `team.md` 和 Story front matter，从已有 `in_progress` 或 `ready` Story 中选择一张，再通过 `cc-use` 启动唯一的 Story Supervisor。没有可运行 Story 时，只有 `team.md` 启用 Explorer 且配置了空看板触发点才调用它；否则正常 Idle。
+5. Story Supervisor 必须创建一个 Executor。Validator 和 Explorer 均为可选，只能按 `team.md` 的职责、触发点与顺序创建；不得因为通用 Playbook 提到某个角色就擅自启用。每个已启用角色正常只创建一个 session，并在反馈往返时复用原 session。
+6. 启用 Validator 时，由独立 Validator 决定接受或退回；未启用时，由 Story Supervisor 根据 Story 验收标准、Executor 的可复查证据和 `team.md` 约定的完成门槛判断本轮结果。启用 Explorer 时，只在契约指定的稳定触发点维护未来 Story。取消使用 `cancelled`，不物理删除 Story 文件。
 7. 同一 Project 同时最多执行一个 Story；不同 Project 可以并行，不设置跨项目的全局 Story 数上限。
 8. cron 只决定是否开始一次新的 Project 激活。已经开始的 Story 可以跨出 cron 匹配时间继续完成，不设置固定 Story 时长。
-9. Story 需要等待人类、管控处理或长期外部条件时，先把进展、证据、等待原因和恢复入口写入 Story 文件，再关闭 Executor、Validator 和 Story Supervisor。恢复时仍是同一个 Story，但使用新的物理 session。
+9. Story 需要等待人类、管控处理或长期外部条件时，先把进展、证据、等待原因和恢复入口写入 Story 文件，再关闭本轮实际创建的下级角色和 Story Supervisor。恢复时仍是同一个 Story，但使用新的物理 session。
 10. 需要人类做业务选择时写入 `questions.md`；环境、权限、认证、进程、配额、磁盘、网络或基础设施问题写入 `escalations.md`。两者都要关联 Story ID，并写清背景、影响、证据、建议和人类需要做的最小决定。
 11. Runner 对每个新建的 Project Supervisor 或 Reporter 只发送一次中文启动 Prompt。启动、承载 session、项目路径和完成回执属于确定性边界；Story 选择、下级 Prompt 和具体工作方式由 Playbook、Harness 与真实结果决定。
-12. 所有顶层 Agent 都使用交互式 TUI，不以 `codex exec`、Claude Code `-p` 或其他非交互模式代替。其他父 Supervisor 只在新建 session、收到实际结果、Validator 退回、人类补充决定或外部条件实质变化时发送 Prompt。
+12. 所有顶层 Agent 都使用交互式 TUI，不以 `codex exec`、Claude Code `-p` 或其他非交互模式代替。其他父 Supervisor 只在新建 session、收到实际结果、已启用角色返回反馈、人类补充决定或外部条件实质变化时发送 Prompt。
 13. 无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。遇到更新提示时跳过并继续；因此无法继续时记录管控异常。
-14. `project.yaml` 只记录 Agent 类型，`schedule.yaml` 只记录时区和 cron 等运行控制。Runner 通过 `PATH` 解析真实可执行文件；下级 Agent 的运行细节由 cc-use 管理，不依赖 shell alias，也不写入项目配置。
+14. `project.yaml` 只记录 Agent 类型，`team.md` 记录业务角色编排，`schedule.yaml` 只记录时区和 cron 等运行控制。Runner 通过 `PATH` 解析真实可执行文件；下级 Agent 的运行细节由 cc-use 管理，不依赖 shell alias，也不写入项目配置。
 
 ## 脚本入口
 

@@ -163,6 +163,8 @@ class RunnerTests(unittest.TestCase):
             self.assertIn("当前承载 session", prompt)
             self.assertIn("原子写入", prompt)
             self.assertIn("决定本轮是否值得推进", prompt)
+            self.assertIn("team.md", prompt)
+            self.assertIn("Validator 和 Explorer 只在契约启用", prompt)
             self.assertNotIn("cc-use finish", prompt)
             self.assertNotIn("codex exec", prompt)
 

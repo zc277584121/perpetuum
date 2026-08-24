@@ -23,7 +23,7 @@
 - 人类只需要回复的最小问题；
 - 回答后如何恢复 Story。
 
-写完 Question 后把 Story 标记为 `waiting`、`waiting_on: human`，关闭当前 Story 的 Executor、Validator 和 Story Supervisor session。人类回复被吸收后，将 Story 改回 `ready`，使用新的 session 继续同一个 Story。
+写完 Question 后把 Story 标记为 `waiting`、`waiting_on: human`，关闭当前 Story 实际创建的角色和 Story Supervisor session。人类回复被吸收后，将 Story 改回 `ready`，使用新的 session 和 `team.md` 当前启用的角色继续同一个 Story。
 
 ## Escalations
 

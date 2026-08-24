@@ -21,6 +21,7 @@ STORY_PATH = re.compile(r"^/api/projects/([^/]+)/stories(?:/([^/]+))?$")
 DOCUMENT_PATH = re.compile(r"^/api/projects/([^/]+)/documents/([^/]+)$")
 PROJECT_DOCUMENTS = {
     "goal": ("goal.md", 100_000),
+    "team": ("team.md", 100_000),
     "history": ("history.md", 200_000),
     "inbox": ("inbox.md", 100_000),
     "questions": ("questions.md", 100_000),

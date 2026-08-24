@@ -2,7 +2,7 @@
 
 > 把长期目标组织成一组可持续运行、可观察、可干预的 Story 看板。
 
-Perpetuum 是一个 Agent Skill。它用轻量本地 Runner 按项目的 cron 计划创建临时 Project Supervisor，再由 Project Supervisor 通过 `cc-use` 调度一条 Story 工作链。长期 Goal、Story、人类输入、问题、管控异常和日报都保存在项目自己的 Harness 中；本地前端直接聚合这些文件，不引入数据库或云服务。
+Perpetuum 是一个 Agent Skill。它用轻量本地 Runner 按项目的 cron 计划创建临时 Project Supervisor，再由 Project Supervisor 通过 `cc-use` 调度一条 Story 工作链。每条工作链必有 Executor，Validator 和 Explorer 则按项目的队伍契约选择启用。长期 Goal、队伍契约、Story、人类输入、问题、管控异常和日报都保存在项目自己的 Harness 中；本地前端直接聚合这些文件，不引入数据库或云服务。
 
 完整的 Agent 使用说明见 [SKILL.md](skills/perpetuum/SKILL.md)。
 
@@ -12,9 +12,9 @@ Perpetuum 是一个 Agent Skill。它用轻量本地 Runner 按项目的 cron �
 Local Runner / Frontend Service
         ├── Project Supervisor A
         │       └── Story Supervisor
-        │               ├── Executor
-        │               ├── Validator
-        │               └── Explorer
+        │               ├── Executor（必选）
+        │               ├── Validator（可选）
+        │               └── Explorer（可选）
         ├── Project Supervisor B
         │       └── Story Supervisor → ...
         └── Reporter
@@ -25,6 +25,7 @@ Runner 只解释 cron、创建交互式 Agent TUI、维护顶层生命周期和�
 ## 特点
 
 - 一个实际项目目录对应一套自包含 Harness 和一个 Story 看板。
+- 每个项目用 `team.md` 保存用户确认的角色职责、触发条件、调用顺序和完成门槛。
 - 每个项目在 `schedule.yaml` 中保存自己的时区和标准五字段 cron。
 - 同一项目同时最多运行一张 Story，不同项目可以并行。
 - cron 只决定何时允许开始新的 Project 激活，不中断已经运行的 Story。

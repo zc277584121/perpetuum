@@ -6,15 +6,15 @@
 Local Runner / Frontend Service
         ├── Project Supervisor A
         │       └── Story Supervisor
-        │               ├── Executor
-        │               ├── Validator
-        │               └── Explorer（Story 收口后）
+        │               ├── Executor（必选）
+        │               ├── Validator（按 team.md 可选）
+        │               └── Explorer（按 team.md 可选）
         ├── Project Supervisor B
         │       └── Story Supervisor → ...
         └── Reporter
 ```
 
-Project 是真实项目目录；Harness 是该项目在 `~/.perpetuum/projects/<project-id>/` 下的长期运行资料。一个 Project 在前端对应一个看板页面，一个 Story 文件对应一张卡片。
+Project 是真实项目目录；Harness 是该项目在 `~/.perpetuum/projects/<project-id>/` 下的长期运行资料。`team.md` 保存用户确认的角色拓扑和完成门槛。一个 Project 在前端对应一个看板页面，一个 Story 文件对应一张卡片。
 
 Runner 不是 Agent。它读取每个项目的 `schedule.yaml`，解释 cron，创建顶层交互式 Agent TUI，并维护完成回执和前端状态。Runner 不读取 Goal 或 Story，不判断项目是否值得工作，也不使用系统 cron 启动每一轮任务。
 
@@ -28,18 +28,20 @@ Runner 确定性地完成：
 4. 发送一次包含项目、Harness、触发原因、Playbook、承载 session 和回执路径的启动 Prompt；
 5. 根据回执或 session 消失回收顶层生命周期。
 
-Project Supervisor 收到 Prompt 后，根据 Playbook、Harness 和真实现场决定选择哪张 Story、如何组织下级 Prompt，以及本轮是否应该正常 Idle。Runner 不定时向仍然存活的 TUI 重复发送固定 Prompt。
+Project Supervisor 收到 Prompt 后，根据 Playbook、`team.md`、Harness 和真实现场决定选择哪张 Story、如何组织下级 Prompt，以及本轮是否应该正常 Idle。Runner 不定时向仍然存活的 TUI 重复发送固定 Prompt。
 
 ## 各层职责
 
-- **Project Supervisor**：读取一个项目的 Harness 和 Story 元数据，处理人类输入，选择至多一张已有 Story，并保证项目同一时刻只有一个 Story 在执行。没有可运行 Story 时调用一次 Explorer 做兜底刷新。
-- **Story Supervisor**：只服务已经选择的一张 Story，管理 Executor、Validator 和 Story 收口后的 Explorer，并在结束前回收自己创建的 session。
+- **Project Supervisor**：读取一个项目的 Harness、`team.md` 和 Story 元数据，处理人类输入，选择至多一张已有 Story，并保证项目同一时刻只有一个 Story 在执行。没有可运行 Story 时，只按队伍契约决定是否调用 Explorer。
+- **Story Supervisor**：只服务已经选择的一张 Story，是该任务的调度者；按 `team.md` 管理必选 Executor 与可选 Validator、Explorer，并在结束前回收自己创建的 session。
 - **Executor**：完成当前 Story。正常情况下一个 Story 只创建一个 Executor session，并允许跨天、多轮持续工作。
-- **Validator**：独立检查当前 Story。正常情况下一个 Story 只创建一个 Validator session；退回后继续在同一个 Validator session 中复验原 Executor 的修改。
-- **Explorer**：在 Story 达到完成、等待或管控阻塞的稳定状态后，根据刚产生的事实维护未来 Story；没有可运行 Story 时也可以由 Project Supervisor 单独调用一次。
+- **Validator**：可选的独立验收者。启用时先从 Goal、Story 和用户约束形成自己的风险模型，再检查产物；不把 Executor 的解释、unit test 或 smoke test 结论当作验收结论。
+- **Explorer**：可选的未来工作探索者。只在 `team.md` 配置的触发点，根据事实研究差距并维护未来 Story。
 - **Reporter**：独立于 Project 工作链的每日检查 Agent，分别为每个项目写日报。
 
 ## Story 工作链
+
+`team.md` 必须显式给出调用图。默认建议是：
 
 ```text
 Project Supervisor 从 Story 看板选择一张卡片
@@ -47,27 +49,29 @@ Project Supervisor 从 Story 看板选择一张卡片
 Story Supervisor 启动 Executor
         ↓
 Executor 产生可验证结果
-        ↓
-Story Supervisor 启动 Validator
-        ↓
-Validator 退回 ──→ 原 Executor 修改 ──→ 原 Validator 复验
-        ↓ 接受、等待或管控阻塞
+        ├── 未启用 Validator：Story Supervisor 按契约完成门槛判断
+        └── 已启用 Validator：启动独立 Validator
+                                ↓
+             Validator 退回 ──→ 原 Executor 修改 ──→ 原 Validator 复验
+                                ↓ 接受、等待或管控阻塞
 保存 Story 结果和恢复上下文
         ↓
-关闭 Executor 与 Validator
+关闭本轮实际创建的 Executor 与 Validator
         ↓
-启动一次 Explorer，维护后续 Story
+若契约启用且满足触发条件，启动 Explorer 维护后续 Story
         ↓
-关闭 Explorer 与 Story Supervisor
+关闭本轮实际创建的 Explorer 与 Story Supervisor
         ↓
 Project Supervisor 写回执并由 Runner 回收
 ```
 
-Validator 的多次退回和 Executor 的多次修改属于同一条连续 Story 工作链，不产生新的 Story 或新的执行循环。只有物理 session 丢失、损坏或无法恢复时才允许替换 Executor 或 Validator。
+Validator 启用时，其多次退回和 Executor 的多次修改属于同一条连续 Story 工作链，不产生新的 Story 或新的执行循环。只有物理 session 丢失、损坏或无法恢复时才允许替换已创建的角色 session。
+
+简单例行任务可以只启用 Executor。例如每日抓取新闻时，`team.md` 应同时约定每次激活的产物、去重与失败处理、本轮完成记录，以及下一轮如何继续，而不是为了凑齐架构固定启动 Validator 或 Explorer。
 
 ## 渐进式披露
 
-Story 的 front matter 保存看板元数据，正文保存完整背景、边界、验收、进展和证据。Project Supervisor 和 Explorer 先通过 Perpetuum 的 Story 接口读取全部元数据，只打开少量候选或当前 Story 的正文。Executor 和 Validator 只读取当前 Story 及直接相关的 Goal、History 和证据。
+Story 的 front matter 保存看板元数据，正文保存完整背景、边界、验收、进展和证据。Project Supervisor 和已启用的 Explorer 先通过 Perpetuum 的 Story 接口读取全部元数据，只打开少量候选或当前 Story 的正文。Executor 和已启用的 Validator 只读取当前 Story 及直接相关的 Goal、History 和证据。
 
 脚本和前端统一使用 PyYAML 解析两个 `---` 分隔符之间的内容。完整格式见 [story.md](story.md)。
 
@@ -86,8 +90,8 @@ Runner 直接创建 Project Supervisor 和 Reporter 的顶层 TUI，因为 Runne
 1. 初始化根据 Goal、项目证据和人类确认建立第一批 Story。
 2. Runner 在项目 cron 匹配时创建 Project Supervisor。
 3. Project Supervisor 从 `in_progress` 或 `ready` Story 中选择一张。
-4. Executor 和 Validator 把该 Story 推进到稳定结果。
-5. Explorer 基于这个结果维护下一轮 Story 池。
+4. Executor 和队伍契约中已启用的角色把该 Story 推进到稳定结果。
+5. 若 Explorer 已启用且满足触发条件，由它基于结果维护下一轮 Story 池。
 6. 下一次 cron 匹配时重复。
 
-没有可运行 Story 时，Project Supervisor 调用一次 Explorer；Explorer 仍没有产生 `ready` Story 时，项目正常进入 Idle，由日报说明即可。
+没有可运行 Story 时，Project Supervisor 只在队伍契约配置了该触发点时调用一次 Explorer；否则项目直接进入 Idle，由日报说明即可。

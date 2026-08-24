@@ -2,7 +2,7 @@
 
 ## 定义
 
-Story 是围绕长期 Goal 的一个独立、完整、可以被 Validator 验收的成果单元。它可以包含调研、实现、实验、修复和验证等多个执行步骤，但完成后必须让项目获得一个新的能力、产物或可信结论。
+Story 是围绕长期 Goal 的一个独立、完整、可以按 `team.md` 完成门槛验收的成果单元。它可以包含调研、实现、实验、修复和验证等多个执行步骤，但完成后必须让项目获得一个新的能力、产物或可信结论。
 
 如果某个动作没有独立价值，只是为了交付后面的成果，它属于 Story 内部步骤。如果两部分可以分别验收，其中一部分取消也不影响另一部分成立，它们通常应该拆成两个 Story。
 
@@ -63,7 +63,7 @@ question_ids:
   - Q-20260814-01
 ```
 
-`waiting_on` 只能是 `human`、`control` 或 `external`。session 名称、当前 Executor/Validator 阶段等管控信息不要写进 Story front matter，统一保存在 `runtime/state.json`。
+`waiting_on` 只能是 `human`、`control` 或 `external`。session 名称和当前角色阶段等管控信息不要写进 Story front matter，统一保存在 `runtime/state.json`。
 
 ## 状态
 
@@ -71,7 +71,7 @@ question_ids:
 - `ready`：边界和验收清楚，可以开始；
 - `in_progress`：正在执行，同一项目最多一张；
 - `waiting`：现场已保存，等待人类、管控处理或外部条件，当前不保留 Story 工作 session；
-- `done`：Validator 已接受；
+- `done`：已通过 `team.md` 配置的完成门槛；启用 Validator 时必须由 Validator 接受；
 - `cancelled`：取消或失效，保留文件用于追溯。
 
 `executing`、`validating` 或 `exploring` 是运行时阶段，不是 Story 长期状态。
@@ -91,7 +91,7 @@ question_ids:
 恢复上下文
 ```
 
-进入 `waiting` 前必须写清已经完成什么、当前可信证据、为什么无法继续、人类或外部条件需要提供什么，以及恢复后的第一步。`history.md` 只接收经过 Validator 接受的可信结论，不保存未验证的中间进展。
+进入 `waiting` 前必须写清已经完成什么、当前可信证据、为什么无法继续、人类或外部条件需要提供什么，以及恢复后的第一步。`history.md` 只接收通过当前队伍契约完成门槛的可信结论，不保存未验收的中间进展；未启用 Validator 时应注明结论由 Story Supervisor 按契约接受，没有经过独立 Validator。
 
 ## 脚本接口
 
@@ -109,6 +109,6 @@ question_ids:
 
 ## 渐进式披露
 
-Project Supervisor 和 Explorer 默认先使用 `story list --json` 读取全部卡片元数据，再读取当前 Story或少量高优先级候选的正文。Executor 和 Validator只读取当前 Story。Reporter 先读取全部元数据，再按日报需要打开当前、等待、最近完成或异常 Story。
+Project Supervisor 和已启用的 Explorer 默认先使用 `story list --json` 读取全部卡片元数据，再读取当前 Story 或少量高优先级候选的正文。Executor 和已启用的 Validator 只读取当前 Story。Reporter 先读取全部元数据，再按日报需要打开当前、等待、最近完成或异常 Story。
 
 脚本只保证格式、校验、原子更新和排序；它不判断哪个 Story 更有价值。Story 的创建、优先级、边界和取舍仍由 Agent 根据 Goal、历史、证据和人类输入判断。

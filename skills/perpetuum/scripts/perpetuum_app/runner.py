@@ -187,8 +187,9 @@ Harness：{project['harness']}
 
 工作时遵守以下边界：
 - 当前承载 session 由 Runner 创建和回收，不是你创建的直属子 session；不要关闭、接管或向它发送消息。
+- `team.md` 是本项目的队伍与角色编排契约。Executor 必须启用；Validator 和 Explorer 只在契约启用并满足触发条件时创建，不得擅自补齐固定角色链。
 - 需要推进 Story 时，通过当前安装的 cc-use Skill 创建唯一的 Story Supervisor；不要在这里硬编码或猜测 cc-use 的具体命令和参数。
-- 同一项目本轮最多推进一张 Story。没有可运行 Story 时可以按 Playbook 调用一次 Explorer 整理看板，仍无工作则正常返回 Idle。
+- 同一项目本轮最多推进一张 Story。没有可运行 Story 时，只在 `team.md` 启用 Explorer 且配置了该触发条件时调用它整理看板；否则正常返回 Idle。
 - 只管理本次由你明确创建并保存了精确名称的直属子 session；全局 session 列表和项目状态只能用于观察，不能证明所有权。
 - 根据 Playbook、Harness 和实际结果组织下级 Prompt。不要因为时间经过、session 仍存活或屏幕暂时没有变化，就发送固定的“继续”Prompt。
 - 不使用非交互式 Agent 模式代替 TUI。无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。

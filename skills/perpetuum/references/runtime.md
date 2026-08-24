@@ -15,6 +15,7 @@
     ├── project.yaml
     ├── schedule.yaml
     ├── goal.md
+    ├── team.md
     ├── stories/
     │   └── S-*.md
     ├── history.md
@@ -27,7 +28,7 @@
         └── events.log
 ```
 
-`activation.yaml` 只保存全局服务、Reporter 和项目注册；`project.yaml` 保存项目目录与 Agent 类型；`schedule.yaml` 保存该项目自己的运行计划；`runner/runs/` 是一次顶层调用的临时交接目录，完成后清理。
+`activation.yaml` 只保存全局服务、Reporter 和项目注册；`project.yaml` 保存项目目录与 Agent 类型；`team.md` 保存用户确认的角色编排；`schedule.yaml` 保存该项目自己的运行计划；`runner/runs/` 是一次顶层调用的临时交接目录，完成后清理。
 
 ## 项目运行计划
 
@@ -62,7 +63,7 @@ cron 匹配或收到立即运行请求后：
 1. Runner 创建新的 tmux 和交互式 Codex 或 Claude Code TUI；
 2. Runner 生成 `dispatch.json` 和 `receipt.json` 路径；
 3. Runner 向 Project Supervisor 发送一次中文启动 Prompt；
-4. Project Supervisor 读取 Harness，选择至多一张 Story，并通过 cc-use 启动 Story Supervisor；
+4. Project Supervisor 读取 Harness 和 `team.md`，选择至多一张 Story，并通过 cc-use 启动 Story Supervisor；
 5. Story 达到完成、等待、管控阻塞或本轮正常 Idle 后，Project Supervisor 关闭直属 session、更新状态并原子写入回执；
 6. Runner 看到回执后回收 Project Supervisor TUI 并清理临时运行目录。
 
@@ -90,7 +91,7 @@ cron 只限制新的激活开始。已经启动的 Story 可以跨出匹配时�
 }
 ```
 
-`story_phase` 可以是 `executing`、`validating` 或 `exploring`。`active_sessions` 是各层尽力记录，不是 cc-use 或 tmux 的全局权威清单，也不授予关闭权限。
+`story_phase` 可以是 `executing`、`validating` 或 `exploring`；未启用对应可选角色时不会进入其阶段。`active_sessions` 是各层尽力记录，不是 cc-use 或 tmux 的全局权威清单，也不授予关闭权限。
 
 Runner 的 `state.json` 使用 `active_projects` 按项目记录顶层 Project Supervisor，因此不同项目可以并行；`active_reporter` 独立记录 Reporter。
 
@@ -101,11 +102,11 @@ Story 需要等待人类、管控处理或长期外部条件时：
 1. 更新 Story 正文的当前进展、证据、等待原因和恢复上下文；
 2. front matter 改为 `status: waiting`，并写入 `waiting_on`；
 3. 业务问题写入 `questions.md`，管控异常写入 `escalations.md`；
-4. 关闭 Executor、Validator 和 Story Supervisor session；
+4. 关闭本轮实际创建的 Executor、可选角色和 Story Supervisor session；
 5. 清空 `current_story`、`story_phase` 和 `active_sessions`；
 6. Project 后续可以执行其他 `ready` Story。
 
-人类回答或条件恢复后，把原 Story 改回 `ready`，下一次使用新的物理 session 恢复同一个 Story。Validator 普通退回不属于等待，继续使用原 Executor 和原 Validator。
+人类回答或条件恢复后，把原 Story 改回 `ready`，下一次使用新的物理 session 恢复同一个 Story。已启用 Validator 的普通退回不属于等待，继续使用原 Executor 和原 Validator。
 
 ## Prompt 和回执
 

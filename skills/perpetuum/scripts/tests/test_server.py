@@ -78,6 +78,13 @@ class ServerTests(unittest.TestCase):
                 self.assertIn("长期目标", goal["content"])
 
                 with urlopen(
+                    f"http://127.0.0.1:{port}/api/projects/{project_id}/documents/team"
+                ) as response:
+                    team = json.loads(response.read())
+                self.assertEqual(team["path"], "team.md")
+                self.assertIn("Agent 队伍契约", team["content"])
+
+                with urlopen(
                     f"http://127.0.0.1:{port}/api/projects/{project_id}/stories/{story_id}"
                 ) as response:
                     story_detail = json.loads(response.read())

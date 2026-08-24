@@ -20,6 +20,7 @@ const storyColumns = [
 
 const documentDefinitions = {
   goal: {label: "Goal", path: "goal.md", access: "只读"},
+  team: {label: "Agent 队伍", path: "team.md", access: "只读"},
   history: {label: "可信历史", path: "history.md", access: "只读"},
   inbox: {label: "Inbox", path: "inbox.md", access: "追加写入"},
   questions: {label: "业务问题", path: "questions.md", access: "追加回复"},
