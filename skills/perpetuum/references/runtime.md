@@ -56,6 +56,8 @@ Runner 常驻运行并在进程内解释这些表达式，不调用 Linux cron�
 
 `force_run` 由“立即运行”控制写入，Runner 消费后自动恢复为 `false`。`paused` 阻止新激活；它不结束已经运行的 Story。
 
+`schedule.yaml` 是这些可变运行控制的唯一当前事实来源。Goal、History 和 `team.md` 可以记录默认策略、授权边界和过去决定，但不要复制一个会过期的“当前 paused/enabled 值”。Runner 已经创建本轮 Project Supervisor 后再暂停项目，只阻止后续激活，不撤销当前工作链已经获得的业务授权。
+
 ## 一次项目激活
 
 cron 匹配或收到立即运行请求后：
@@ -93,7 +95,7 @@ cron 只限制新的激活开始。已经启动的 Story 可以跨出匹配时�
 }
 ```
 
-`story_phase` 可以是 `executing`、`validating` 或 `exploring`；未启用对应可选角色时不会进入其阶段。`active_sessions` 是各层尽力记录，不是 cc-use 或 tmux 的全局权威清单，也不授予关闭权限。
+`story_phase` 可以是 `executing`、`validating` 或 `exploring`；未启用对应可选角色时不会进入其阶段。`active_sessions` 是各层尽力记录，不是 cc-use 或 tmux 的全局权威清单，也不授予关闭权限。每个父 Supervisor 仍须在创建直属角色时保存 `start` 返回的精确名称，并在关闭时把 `finish` 的结构化结果追加到 `runtime/events.log`；列表中不存在只能说明当前不可见，不能证明曾经 graceful 关闭。
 
 Runner 的 `state.json` 使用 `active_projects` 按项目记录顶层 Project Supervisor，因此不同项目可以并行；`active_reporter` 独立记录 Reporter。
 
@@ -124,6 +126,8 @@ Project Supervisor 的业务调度是软性的：根据 Playbook、Story 看板�
 <skill-directory>/scripts/perpetuum status
 <skill-directory>/scripts/perpetuum project list
 <skill-directory>/scripts/perpetuum project schedule <project-id> "*/5 0-5 * * *" --timezone Asia/Shanghai
+<skill-directory>/scripts/perpetuum reporter pause
+<skill-directory>/scripts/perpetuum reporter resume
 <skill-directory>/scripts/perpetuum story list <project-id> --json
 <skill-directory>/scripts/perpetuum stop
 ```

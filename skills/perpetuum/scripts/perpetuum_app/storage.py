@@ -715,6 +715,7 @@ def project_templates(name: str, path: Path) -> Dict[str, str]:
             "- 请说明探索职责、运行触发点和允许调整的 Story 范围。\n\n"
             "## 调用图与完成门槛\n\n"
             "- 请明确角色调用顺序、反馈回路、终止条件，以及未启用 Validator 时由 Story Supervisor 如何判定本轮完成。\n"
+            "- 每个 Supervisor 必须在创建直属角色后立即保存精确 session 名称，并在关闭时持久化 `finish` 的结构化结果。\n"
         ),
         "history.md": (
             "# 可信历史\n\n"

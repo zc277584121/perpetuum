@@ -17,7 +17,7 @@ Story Supervisor 不重新选择 Story，也不擅自增加契约没有启用的
 
 ## Executor（必选）
 
-通过 `cc-use` 创建一个独立 Executor session。Prompt 至少说明：
+通过 `cc-use` 创建一个独立 Executor session。`start` 完成后立即从结构化结果保存精确 session 名称，并在发送 Executor 首个 Prompt 之前，把角色、Story ID、创建时间和 session 名称写入 `runtime/events.log` 与 `runtime/state.json.active_sessions`。不得只依赖稍后可能被 `finish` 删除的 cc-use 状态目录，也不得在结束时通过全局 session 列表反推所有权。Prompt 至少说明：
 
 - 当前唯一 Story 及其与长期 Goal 的关系；
 - Story 背景、预期成果、范围、边界和验收标准；
@@ -27,6 +27,8 @@ Story Supervisor 不重新选择 Story，也不擅自增加契约没有启用的
 - 需要业务判断或管控处理时应返回的完整背景。
 
 正常情况下整个 Story 只使用这一个 Executor session。允许跨天、多轮工作和自动 compaction；不要因为时间经过或暂时没有输出发送固定 Prompt。
+
+每个直属角色使用一条本轮内存所有权记录，至少包含 `role`、`session`、`created_at`、`closed_at`、`shutdown`、`exit_code` 和 `verified`。调用 `finish` 时先保存其完整结构化结果，再从 `active_sessions` 移除名称；把相同字段追加到 `runtime/events.log`，并在最终返回中逐条交给 Project Supervisor。`finish` 未返回、结果无法解析或精确 session 无法核验时，不把“列表中不存在”写成正常关闭证据；如实标记 `verified: false`，保存业务结果，并返回独立的管控缺口。
 
 ## Validator（可选）
 
@@ -44,7 +46,7 @@ Validator 退回时，把它独立发现的具体缺口交给原 Executor；Exec
 2. 一次性 Story 的 front matter 改为 `done`；例行任务按 `team.md` 记录本轮完成，并恢复为契约约定的下一轮可运行状态；
 3. 把精简可信结论写入 `history.md`，并注明由 Validator 接受或由 Story Supervisor 在未启用 Validator 时按契约接受；
 4. 清除 Story 的等待字段；
-5. 关闭并复核 Executor 与实际创建的 Validator session；
+5. 关闭并复核 Executor 与实际创建的 Validator session，先持久化每次 `finish` 的精确名称和结构化退出结果；
 6. 仅当 Explorer 已启用且满足此处触发条件时，调用一次 Explorer 维护后续 Story；
 7. 清空项目 `current_story`、`story_phase` 和活动 session，项目回到 `idle`；
 8. 关闭实际创建的 Explorer，再向 Project Supervisor 返回结果。
@@ -56,7 +58,7 @@ Validator 退回时，把它独立发现的具体缺口交给原 Executor；Exec
 1. 把当前进展、可信证据、等待原因、恢复条件和恢复第一步写入 Story 正文；
 2. Story 改为 `waiting`，设置 `waiting_on`；
 3. Question 或 Escalation 写清 Story ID 和完整来龙去脉；
-4. 关闭并复核本轮实际创建的 Executor 与 Validator session；
+4. 关闭并复核本轮实际创建的 Executor 与 Validator session，先持久化每次 `finish` 的精确名称和结构化退出结果；
 5. 仅当 Explorer 已启用且配置了当前稳定状态触发点时，调用一次 Explorer；
 6. 清空 `current_story`、`story_phase` 和活动 session；
 7. 项目状态使用 `waiting_human`、`control_blocked` 或 `idle`；
@@ -68,4 +70,4 @@ Validator 退回时，把它独立发现的具体缺口交给原 Executor；Exec
 
 只有 `team.md` 启用 Explorer 且当前满足契约触发条件时才创建。给它提供刚刚稳定的 Story、实际验收结论、History、Goal、人类输入、Story 元数据列表，以及契约允许它调整的范围。Explorer 不得改写刚刚完成门槛已经接受的事实，也不得物理删除 Story 文件。
 
-Explorer 完成后关闭其 session。Story Supervisor 结束前只关闭并复核自己明确创建并保存了精确名称的直属角色 session，不根据全局列表操作来源不明的 session。
+Explorer 完成后关闭其 session。Story Supervisor 结束前只关闭并复核自己明确创建并保存了精确名称的直属角色 session，不根据全局列表操作来源不明的 session。最终返回必须包含结构化 `direct_sessions` 列表；缺少精确名称、`finish` 结果或核验证据时，不得用自然语言“应该已经关闭”掩盖。

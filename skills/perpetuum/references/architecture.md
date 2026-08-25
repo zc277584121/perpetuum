@@ -81,7 +81,7 @@ Runner 直接创建 Project Supervisor 和 Reporter 的顶层 TUI，因为 Runne
 
 每个 Supervisor 都运行在上级为它创建的承载 session 中，同时可以为下级创建直属子 session。当前承载 session 不属于它自己管理；每个父节点只管理本次由自己明确创建并保存了精确名称的直属子 session。全局 session 列表和项目状态只能用于观察，不能证明所有权。
 
-父节点创建下级后，把下级承载 session 的精确名称写入首次 Prompt，并说明该 session 由上级管理。调用最终返回前，不根据中间状态或临时空输出判断 session 创建成功、失败或回执缺失。
+父节点创建下级后，立即把 `start` 结构化结果中的精确 session 名称和角色写入项目运行事件及本轮所有权记录，再把名称写入首次 Prompt，并说明该 session 由上级管理。结束时先持久化 `finish` 的结构化 `shutdown`、`exit_code` 和时间，再清除活动记录。调用最终返回前，不根据中间状态、临时空输出或全局列表中已经找不到 session，推断创建、关闭或核验成功。
 
 ## 并发和动力
 

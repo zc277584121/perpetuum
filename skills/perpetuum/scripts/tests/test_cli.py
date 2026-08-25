@@ -25,6 +25,34 @@ class QuietHandler(BaseHTTPRequestHandler):
 
 
 class CliTests(unittest.TestCase):
+    def test_reporter_pause_and_resume_update_activation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            storage.ensure_home(home)
+
+            with redirect_stdout(io.StringIO()):
+                paused = cli.reporter_control(home, "pause")
+            config = storage.ensure_home(home)
+            self.assertEqual(paused, 0)
+            self.assertFalse(config["report"]["enabled"])
+            self.assertFalse(config["report"]["force"])
+
+            with redirect_stdout(io.StringIO()):
+                resumed = cli.reporter_control(home, "resume")
+            self.assertEqual(resumed, 0)
+            self.assertTrue(storage.ensure_home(home)["report"]["enabled"])
+
+    def test_reporter_control_rejects_unknown_action(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / "home"
+            error = io.StringIO()
+
+            with redirect_stderr(error):
+                result = cli.reporter_control(home, "toggle")
+
+            self.assertEqual(result, 2)
+            self.assertIn("不支持", error.getvalue())
+
     def test_story_list_outputs_metadata_without_body(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

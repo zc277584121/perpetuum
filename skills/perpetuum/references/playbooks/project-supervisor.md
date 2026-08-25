@@ -9,6 +9,8 @@ Project Supervisor 管理一个项目的业务入口和管控状态，不直接�
 3. 使用 Perpetuum Story 接口只读取全部 Story front matter；不要一开始打开所有正文。
 4. 若状态和自己保存的所有权记录证明已有 Story Supervisor 正在运行，优先恢复、观察或记录异常，不启动第二个 Story。全局 session 列表和 `active_sessions` 不能证明所有权。
 
+`schedule.yaml` 是 `enabled`、`paused`、时区和 cron 当前值的唯一事实来源。Goal、History 或 `team.md` 中的初始化状态只说明当时决定，不能覆盖后来的人类 pause/resume 操作。Runner 已经为本轮创建承载 session 时，即使项目随后被暂停，本次已开始的激活仍继续到稳定结果；暂停只阻止未来激活。只有新的明确人类指令撤销本轮业务或外部副作用授权时才停止，并按取消或等待流程保存现场。
+
 ## 选择 Story
 
 没有 Story 正在运行时：
@@ -34,6 +36,7 @@ Project Supervisor 做轻量调度判断，不重复 Explorer 的全面研究，
 - 本次只服务这一张 Story；
 - 需要返回最终状态、证据、Questions、Escalations，以及已启用 Explorer 对后续看板的调整；
 - 结束前只关闭自己明确创建并保存名称的直属角色 session。
+- 最终返回结构化 `direct_sessions`，逐条包含角色、精确名称、创建时间、关闭时间、`finish` 的 `shutdown`/`exit_code` 和是否核验；缺证据时明确返回管控缺口。
 
 不要在 Story 开始前固定调用 Explorer，也不要发送与当前证据无关的“继续”Prompt。只有 Story Supervisor 返回实际结果、请求澄清、人类补充决定或外部条件实质变化时才继续对话。
 
@@ -43,6 +46,6 @@ Project Supervisor 做轻量调度判断，不重复 Explorer 的全面研究，
 
 ## 结束时
 
-关闭并复核本次明确创建且保存了精确名称的直属 Story Supervisor 或按契约创建的 Explorer session，更新 `runtime/state.json` 和 `runtime/events.log`，再按 Runner dispatch 原子写入完成回执。回执至少包含 `status`、`summary`、`project_id` 和 `finished_at`。写完后等待 Runner 回收当前承载 session；不要自行关闭它，也不要根据全局列表清理来源不明的 session。
+关闭并复核本次明确创建且保存了精确名称的直属 Story Supervisor 或按契约创建的 Explorer session，先把每次 `finish` 的结构化结果写入 `runtime/events.log`。更新 `runtime/state.json` 后，再按 Runner dispatch 原子写入完成回执。回执至少包含 `status`、`summary`、`project_id`、`finished_at` 和结构化 `direct_sessions`；下级返回的生命周期缺口必须保留在回执中。写完后等待 Runner 回收当前承载 session；不要自行关闭它，也不要根据全局列表清理来源不明的 session。
 
 无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。
