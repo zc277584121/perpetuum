@@ -449,12 +449,7 @@ def story_update(args: argparse.Namespace, home: Path) -> int:
 
 def story_archive(home: Path, project_id: str, story_id: str) -> int:
     try:
-        story = storage.update_story(
-            home,
-            project_id,
-            story_id,
-            {"status": "cancelled"},
-        )
+        story = storage.archive_story(home, project_id, story_id)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2

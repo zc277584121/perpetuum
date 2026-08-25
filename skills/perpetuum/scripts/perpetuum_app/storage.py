@@ -34,6 +34,7 @@ STORY_STATUS_ORDER = {
 }
 STORY_PRIORITIES = ("P0", "P1", "P2", "P3")
 STORY_PRIORITY_ORDER = {value: index for index, value in enumerate(STORY_PRIORITIES)}
+DEFAULT_VISIBLE_DONE_LIMIT = 40
 STORY_MUTABLE_FIELDS = {
     "title",
     "summary",
@@ -303,6 +304,8 @@ def create_story(
         },
         selected_id,
     )
+    if metadata["status"] == "done":
+        metadata["completed_at"] = now
     selected_body = story_body_template() if body is None else body
     atomic_write_text(path, dump_front_matter(metadata, selected_body))
     return {"metadata": metadata, "body": selected_body, "path": str(path)}
@@ -342,6 +345,81 @@ def list_stories(home: Path, project_id: str) -> List[Dict[str, Any]]:
     return stories
 
 
+def partition_stories_for_board(
+    stories: List[Dict[str, Any]],
+    visible_done_limit: int = DEFAULT_VISIBLE_DONE_LIMIT,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Split active-board stories from cancelled or archived history.
+
+    Completion retention is a presentation concern: overflow stories keep
+    ``status: done`` and remain addressable by their stable Story IDs.
+    """
+    if visible_done_limit < 0:
+        raise ValueError("visible_done_limit 不能小于 0")
+
+    explicitly_archived = {
+        str(story.get("id"))
+        for story in stories
+        if story.get("archived_at")
+    }
+    visible_done_ids = {
+        str(story.get("id"))
+        for story in sorted(
+            (
+                story
+                for story in stories
+                if story.get("status") == "done"
+                and str(story.get("id")) not in explicitly_archived
+            ),
+            key=lambda story: (
+                str(
+                    story.get("completed_at")
+                    or story.get("updated_at")
+                    or story.get("created_at")
+                    or ""
+                ),
+                str(story.get("id", "")),
+            ),
+            reverse=True,
+        )[:visible_done_limit]
+    }
+
+    board: List[Dict[str, Any]] = []
+    archived: List[Dict[str, Any]] = []
+    for story in stories:
+        story_id = str(story.get("id"))
+        status = str(story.get("status"))
+        reason = None
+        if status == "cancelled":
+            reason = "cancelled"
+        elif story_id in explicitly_archived:
+            reason = "manual"
+        elif status == "done" and story_id not in visible_done_ids:
+            reason = "completed_overflow"
+
+        if reason is None:
+            board.append(story)
+            continue
+        archived_story = dict(story)
+        archived_story["archive_reason"] = reason
+        archived.append(archived_story)
+
+    archived.sort(
+        key=lambda story: (
+            str(
+                story.get("archived_at")
+                or story.get("completed_at")
+                or story.get("updated_at")
+                or story.get("created_at")
+                or ""
+            ),
+            str(story.get("id", "")),
+        ),
+        reverse=True,
+    )
+    return board, archived
+
+
 def update_story(
     home: Path,
     project_id: str,
@@ -355,15 +433,36 @@ def update_story(
     unknown = set(changes) - STORY_MUTABLE_FIELDS
     if unknown:
         raise ValueError(f"不允许更新 Story 字段：{', '.join(sorted(unknown))}")
+    previous_status = metadata.get("status")
     metadata.update(changes)
     if metadata.get("status") != "waiting":
         metadata.pop("waiting_on", None)
-    metadata["updated_at"] = utc_now()
+    now = utc_now()
+    if metadata.get("status") == "done" and previous_status != "done":
+        metadata["completed_at"] = now
+    elif metadata.get("status") != "done":
+        metadata.pop("completed_at", None)
+        metadata.pop("archived_at", None)
+    metadata["updated_at"] = now
     metadata = normalize_story_metadata(metadata, story_id)
     selected_body = story["body"] if body is None else body
     path = story_path(home, project_id, story_id)
     atomic_write_text(path, dump_front_matter(metadata, selected_body))
     return {"metadata": metadata, "body": selected_body, "path": str(path)}
+
+
+def archive_story(home: Path, project_id: str, story_id: str) -> Dict[str, Any]:
+    story = load_story(home, project_id, story_id)
+    metadata = dict(story["metadata"])
+    if metadata.get("status") != "done":
+        raise ValueError("只有已完成的 Story 可以归档；取消请使用 status: cancelled")
+    now = utc_now()
+    metadata["archived_at"] = now
+    metadata["updated_at"] = now
+    metadata = normalize_story_metadata(metadata, story_id)
+    path = story_path(home, project_id, story_id)
+    atomic_write_text(path, dump_front_matter(metadata, story["body"]))
+    return {"metadata": metadata, "body": story["body"], "path": str(path)}
 
 
 def write_json(path: Path, value: Any) -> None:

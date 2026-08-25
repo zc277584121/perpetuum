@@ -64,6 +64,8 @@ class ServerTests(unittest.TestCase):
                 ) as response:
                     detail = json.loads(response.read())
                 self.assertEqual(detail["stories"][0]["id"], story_id)
+                self.assertEqual(detail["archived_stories"], [])
+                self.assertEqual(detail["visible_done_limit"], 40)
                 self.assertNotIn("files", detail)
                 self.assertEqual(
                     detail["attention"],

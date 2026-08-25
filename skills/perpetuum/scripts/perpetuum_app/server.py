@@ -138,6 +138,8 @@ def project_detail(home: Path, project_id: str) -> Dict[str, Any]:
     harness = storage.project_dir(home, project_id)
     questions = storage.read_text(harness / "questions.md", limit=100_000)
     escalations = storage.read_text(harness / "escalations.md", limit=100_000)
+    stories = storage.list_stories(home, project_id)
+    board_stories, archived_stories = storage.partition_stories_for_board(stories)
     return {
         "summary": project_summary(
             home,
@@ -149,7 +151,9 @@ def project_detail(home: Path, project_id: str) -> Dict[str, Any]:
         ),
         "project": storage.load_project(home, project_id),
         "runtime": storage.load_project_state(home, project_id),
-        "stories": storage.list_stories(home, project_id),
+        "stories": board_stories,
+        "archived_stories": archived_stories,
+        "visible_done_limit": storage.DEFAULT_VISIBLE_DONE_LIMIT,
         "attention": {
             "questions": has_pending_content(questions, "待人类回答"),
             "escalations": has_pending_content(escalations, "待处理"),

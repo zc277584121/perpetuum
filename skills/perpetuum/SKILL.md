@@ -48,7 +48,7 @@ Perpetuum 把真实项目目录组织成可长期运行的 Story 看板。本地
 1. 初始化时先检查项目和可用历史，再通过可多轮的对话与用户共同形成完整 Goal、队伍契约、第一批 Story 和运行计划。用户没有明确指定、也没有明确委托 Agent 决定的长期行为或授权都必须询问；建议、默认值、历史偏好和沉默都不算确认。待决项清零并由用户确认合并后的完整契约后，才能建立 Harness。
 2. `goal.md` 是长期业务契约；`team.md` 是角色启用、职责、触发条件、调用图和完成门槛的唯一事实来源；`stories/*.md` 是 Story 的唯一事实来源；`history.md` 只保存通过已配置完成门槛的结论和重要决定；`schedule.yaml` 是该项目自动启动计划的唯一事实来源。
 3. Runner 只机械解释标准五字段 cron。匹配后，如果该项目没有活动的 Project Supervisor，就创建新的交互式 Codex 或 Claude Code TUI，并发送一次启动 Prompt；已有活动链路时不重复创建，也不重复发送 Prompt。
-4. Project Supervisor 先读取 `team.md` 和 Story front matter，从已有 `in_progress` 或 `ready` Story 中选择一张，再通过 `cc-use` 启动唯一的 Story Supervisor。没有可运行 Story 时，只有 `team.md` 启用 Explorer 且配置了空看板触发点才调用它；否则正常 Idle。
+4. Project Supervisor 先读取 `team.md` 和 Story front matter，从已有 `in_progress` 或 `ready` Story 中选择一张，再通过 `cc-use` 启动唯一的 Story Supervisor。没有可运行 Story 时，只有 `team.md` 启用 Explorer 且配置了空看板触发点才调用它；空看板 Explorer 新建了当前已经到期且可立即执行的 `ready` Story 时，同一个 Project Supervisor 重新读取元数据并继续选择，否则正常 Idle。
 5. Story Supervisor 必须创建一个 Executor。Validator 和 Explorer 均为可选，只能按 `team.md` 的职责、触发点与顺序创建；不得因为通用 Playbook 提到某个角色就擅自启用。每个已启用角色正常只创建一个 session，并在反馈往返时复用原 session。
 6. 启用 Validator 时，由独立 Validator 决定接受或退回；未启用时，由 Story Supervisor 根据 Story 验收标准、Executor 的可复查证据和 `team.md` 约定的完成门槛判断本轮结果。启用 Explorer 时，只在契约指定的稳定触发点维护未来 Story。取消使用 `cancelled`，不物理删除 Story 文件。
 7. 同一 Project 同时最多执行一个 Story；不同 Project 可以并行，不设置跨项目的全局 Story 数上限。

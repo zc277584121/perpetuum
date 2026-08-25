@@ -48,6 +48,30 @@ class CliTests(unittest.TestCase):
             self.assertIn("首个 Story", output.getvalue())
             self.assertNotIn("秘密细节", output.getvalue())
 
+    def test_story_archive_preserves_completed_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / "home"
+            project = root / "project"
+            project.mkdir()
+            project_id = storage.register_project(home, project)
+            story = storage.create_story(
+                home,
+                project_id,
+                "已经完成",
+                "应该进入历史视图",
+                status="done",
+            )
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.story_archive(home, project_id, story["metadata"]["id"])
+
+            self.assertEqual(result, 0)
+            loaded = storage.load_story(home, project_id, story["metadata"]["id"])
+            self.assertEqual(loaded["metadata"]["status"], "done")
+            self.assertIn("archived_at", loaded["metadata"])
+
     def test_start_reuses_existing_perpetuum_frontend(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory) / "home"

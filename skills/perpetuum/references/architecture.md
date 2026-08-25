@@ -92,6 +92,6 @@ Runner 直接创建 Project Supervisor 和 Reporter 的顶层 TUI，因为 Runne
 3. Project Supervisor 从 `in_progress` 或 `ready` Story 中选择一张。
 4. Executor 和队伍契约中已启用的角色把该 Story 推进到稳定结果。
 5. 若 Explorer 已启用且满足触发条件，由它基于结果维护下一轮 Story 池。
-6. 下一次 cron 匹配时重复。
+6. 下一次 cron 匹配时重复。若空看板 Explorer 按契约创建的是当前已到期的 `ready` Story，Project Supervisor 可以在本次激活中重新读取并立即选择；尚未到期或仅为候选的 Story 留待后续激活。
 
 没有可运行 Story 时，Project Supervisor 只在队伍契约配置了该触发点时调用一次 Explorer；否则项目直接进入 Idle，由日报说明即可。

@@ -142,6 +142,67 @@ class StorageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "文件名"):
                 storage.list_stories(home, project_id)
 
+    def test_story_board_keeps_latest_completed_cards_and_archives_overflow(self):
+        stories = []
+        for index in range(43):
+            stories.append(
+                {
+                    "id": f"S-{index:03d}",
+                    "status": "done",
+                    "completed_at": f"2026-08-{index + 1:02d}T00:00:00Z",
+                }
+            )
+        stories.append({"id": "S-READY", "status": "ready"})
+        stories.append({"id": "S-CANCELLED", "status": "cancelled"})
+
+        board, archived = storage.partition_stories_for_board(stories, 40)
+
+        self.assertEqual(len([story for story in board if story["status"] == "done"]), 40)
+        self.assertIn("S-READY", {story["id"] for story in board})
+        self.assertEqual(len(archived), 4)
+        self.assertEqual(
+            {story["archive_reason"] for story in archived},
+            {"completed_overflow", "cancelled"},
+        )
+        self.assertTrue(all(story["status"] == "done" for story in archived if story["id"] != "S-CANCELLED"))
+
+    def test_manual_archive_preserves_done_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / "home"
+            project = root / "project"
+            project.mkdir()
+            project_id = storage.register_project(home, project)
+            story = storage.create_story(
+                home,
+                project_id,
+                "完成结果",
+                "保留完成事实",
+                status="done",
+            )
+
+            archived = storage.archive_story(home, project_id, story["metadata"]["id"])
+
+            self.assertEqual(archived["metadata"]["status"], "done")
+            self.assertIn("archived_at", archived["metadata"])
+            board, history = storage.partition_stories_for_board(
+                storage.list_stories(home, project_id)
+            )
+            self.assertEqual(board, [])
+            self.assertEqual(history[0]["archive_reason"], "manual")
+
+    def test_manual_archive_rejects_unfinished_story(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / "home"
+            project = root / "project"
+            project.mkdir()
+            project_id = storage.register_project(home, project)
+            story = storage.create_story(home, project_id, "待办", "尚未完成")
+
+            with self.assertRaisesRegex(ValueError, "只有已完成"):
+                storage.archive_story(home, project_id, story["metadata"]["id"])
+
     def test_project_schedule_can_be_updated(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

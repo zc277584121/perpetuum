@@ -35,7 +35,7 @@ const drawerDefinitions = {
   report: {kicker: "项目汇报", title: "最新日报", description: "查看最近一次独立 Reporter 汇总。"},
   documents: {kicker: "项目资料", title: "资料与历史", description: "按需读取 Goal、历史、通信文件和运行事件。"},
   settings: {kicker: "项目管控", title: "运行设置", description: "调整工作时间并查看 Agent 与 Session 状态。"},
-  archive: {kicker: "看板归档", title: "已归档 Story", description: "保留取消或失效的卡片用于追溯。"},
+  archive: {kicker: "看板历史", title: "已归档 Story", description: "查看较早完成、手工归档或已经取消的卡片。"},
 };
 
 async function request(path, options = {}) {
@@ -430,6 +430,12 @@ function createStoryCard(story, runtime, archived = false) {
   const updated = document.createElement("span");
   updated.textContent = formatTime(story.updated_at);
   footer.appendChild(updated);
+  if (archived) {
+    const archiveContext = document.createElement("span");
+    archiveContext.className = "story-context";
+    archiveContext.textContent = story.archive_reason === "cancelled" ? "已取消" : "已归档";
+    footer.appendChild(archiveContext);
+  }
   if (runtime.current_story === story.id && runtime.story_phase) {
     const phase = document.createElement("span");
     phase.className = "story-context active";
@@ -485,7 +491,7 @@ function renderStoryBoard() {
   }
 
   const openCount = stories.filter(story => !["done", "cancelled"].includes(story.status)).length;
-  const archivedCount = stories.filter(story => story.status === "cancelled").length;
+  const archivedCount = (state.project.archived_stories || []).length;
   document.getElementById("open-story-count").textContent = String(openCount);
   document.getElementById("archived-story-count").textContent = String(archivedCount);
 }
@@ -494,14 +500,14 @@ function renderArchive() {
   const list = document.getElementById("archive-list");
   list.replaceChildren();
   const runtime = state.project.runtime || {};
-  const stories = (state.project.stories || []).filter(story => story.status === "cancelled");
+  const stories = state.project.archived_stories || [];
   for (const story of stories) {
     list.appendChild(createStoryCard(story, runtime, true));
   }
   if (!stories.length) {
     const empty = document.createElement("p");
     empty.className = "drawer-empty";
-    empty.textContent = "还没有归档 Story。";
+    empty.textContent = "还没有归档或取消的 Story。";
     list.appendChild(empty);
   }
 }

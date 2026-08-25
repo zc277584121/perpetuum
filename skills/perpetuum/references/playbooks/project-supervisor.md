@@ -17,7 +17,7 @@ Project Supervisor 管理一个项目的业务入口和管控状态，不直接�
 2. 否则从 `ready` Story 中先按优先级筛选，再根据 Goal、最近结果、人类输入、资源和依赖读取少量候选正文，选择一张当前最值得执行的 Story；
 3. `candidate`、`waiting`、`done` 和 `cancelled` 不直接开始；
 4. 没有 `in_progress` 或 `ready` Story 时，只有 `team.md` 启用 Explorer 且明确配置了空看板触发点，才单独创建一次 Explorer session 刷新看板，再重新读取元数据；
-5. 未配置该触发点，或 Explorer 仍未产生可运行 Story 时，项目正常 Idle。
+5. 空看板 Explorer 新建了已经到期、边界完整且可立即执行的 `ready` Story 时，在同一次项目激活中继续选择它；Explorer 只产生未来候选、没有创建 Story、发现本周期实例已经存在或仍未产生可运行 Story时，项目正常 Idle。
 
 Project Supervisor 做轻量调度判断，不重复 Explorer 的全面研究，也不机械选择“最新创建”的卡片。
 

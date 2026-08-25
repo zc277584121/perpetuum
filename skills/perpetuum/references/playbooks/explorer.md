@@ -25,6 +25,6 @@ Explorer 是 `team.md` 可选启用的未来工作探索角色，负责根据真
 6. 不修改其他正在运行的 Story，不无声改写已经通过配置完成门槛的事实。
 7. 没有值得调整的内容时可以不做任何修改，并解释原因。
 
-Explorer 的输出是更新后的 Story 池和简明变更摘要，不直接开始下一张 Story。下一次项目激活时由 Project Supervisor 重新选择。
+Explorer 的输出是更新后的 Story 池和简明变更摘要，自己不直接开始 Story。由空看板 Project Supervisor 调用时，如果 Explorer 按契约创建的是当前已经到期、边界完整且可立即执行的 `ready` Story，原 Project Supervisor 在同一次激活中重新读取元数据并选择；Story 收口后创建的未来候选或尚未到期 Story 留待后续激活。
 
 无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。

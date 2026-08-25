@@ -67,6 +67,8 @@ cron 匹配或收到立即运行请求后：
 5. Story 达到完成、等待、管控阻塞或本轮正常 Idle 后，Project Supervisor 关闭直属 session、更新状态并原子写入回执；
 6. Runner 看到回执后回收 Project Supervisor TUI 并清理临时运行目录。
 
+当 `team.md` 配置了空看板 Explorer 时，Project Supervisor 可以在步骤 4 内先让 Explorer 创建当前已到期的 `ready` Story，再在同一次激活中选择它；Runner 不需要为这张新卡额外触发第二次 cron。
+
 cron 只限制新的激活开始。已经启动的 Story 可以跨出匹配时间继续完成，不设置固定 Story 时长。
 
 ## 项目状态

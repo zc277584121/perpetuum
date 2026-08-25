@@ -55,6 +55,15 @@ updated_at: 2026-08-14T08:00:00Z
 | `created_at` | 创建时间 |
 | `updated_at` | 最近更新时间 |
 
+完成和归档可以增加：
+
+```yaml
+completed_at: 2026-08-26T08:00:00Z
+archived_at: 2026-09-03T08:00:00Z
+```
+
+`completed_at` 记录第一次进入 `done` 的时间。`archived_at` 是独立的看板展示属性，不改变 Story 的业务状态；正常完成的 Story 归档后仍然是 `status: done`。
+
 等待状态可以增加：
 
 ```yaml
@@ -75,6 +84,12 @@ question_ids:
 - `cancelled`：取消或失效，保留文件用于追溯。
 
 `executing`、`validating` 或 `exploring` 是运行时阶段，不是 Story 长期状态。
+
+## 完成卡片归档
+
+主看板默认只保留最新 40 张未手工归档的 `done` Story。更早完成的卡片自动进入前端归档抽屉，但文件、正文、证据、稳定 ID 和 `status: done` 都保持不变。`cancelled` 只表示取消或失效，不再兼作成功归档状态。
+
+`story archive` 只接受已经完成的 Story，为它记录 `archived_at` 并从主看板收纳到归档抽屉；取消一张未完成 Story 应显式把状态改为 `cancelled`。
 
 ## 正文
 
