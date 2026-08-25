@@ -49,11 +49,6 @@ STORY_MUTABLE_FIELDS = {
 DEFAULT_ACTIVATION = {
     "version": 1,
     "timezone": "Asia/Shanghai",
-    "report": {
-        "enabled": True,
-        "time": "09:00",
-        "force": False,
-    },
     "service": {
         "host": "127.0.0.1",
         "port": 8765,
@@ -553,9 +548,7 @@ def default_runner_state() -> Dict[str, Any]:
         "next_schedule_check_at": None,
         "last_schedule_slots": {},
         "schedule_errors": {},
-        "last_report_date": None,
         "active_projects": {},
-        "active_reporter": None,
         "last_error": None,
     }
 
@@ -610,7 +603,6 @@ def register_project(
     selected_id = slugify(project_id) if project_id else project_id_for_path(resolved)
     harness = project_dir(home, selected_id)
     harness.mkdir(parents=True, exist_ok=True)
-    (harness / "reports").mkdir(exist_ok=True)
     (harness / "runtime").mkdir(exist_ok=True)
     (harness / "stories").mkdir(exist_ok=True)
 
@@ -746,10 +738,6 @@ def project_templates(name: str, path: Path) -> Dict[str, str]:
             "暂无。\n\n"
             "## 人类回复（追加区）\n\n"
             "暂无。\n"
-        ),
-        "reports/latest.md": (
-            f"# {name}：最新日报\n\n"
-            "尚未生成日报。\n"
         ),
     }
 

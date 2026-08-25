@@ -1,11 +1,11 @@
 ---
 name: perpetuum
-description: 为一个或多个项目建立、运行和管理长期 Agent 队伍。适用于初始化长期自主工作、按项目 cron 计划持续推进 Story、查看或调整 Story 看板、处理人类输入，以及生成项目日报。
+description: 为一个或多个项目建立、运行和管理长期 Agent 队伍。适用于初始化长期自主工作、按项目 cron 计划持续推进 Story、查看或调整 Story 看板，以及处理人类输入。
 ---
 
 # Perpetuum
 
-Perpetuum 把真实项目目录组织成可长期运行的 Story 看板。本地 Runner 按每个项目自己的 cron 计划创建临时 Project Supervisor；Project Supervisor 再通过 `cc-use` 调度 Story Supervisor 和下级 Agent。长期 Goal、队伍契约、Story、可信历史、人类输入、运行状态和日报都保存在项目自己的 Harness 中。
+Perpetuum 把真实项目目录组织成可长期运行的 Story 看板。本地 Runner 按每个项目自己的 cron 计划创建临时 Project Supervisor；Project Supervisor 再通过 `cc-use` 调度 Story Supervisor 和下级 Agent。长期 Goal、队伍契约、Story、可信历史、人类输入和运行状态都保存在项目自己的 Harness 中。
 
 ## 依赖
 
@@ -16,12 +16,11 @@ Perpetuum 把真实项目目录组织成可长期运行的 Story 看板。本地
 ## 核心名词
 
 - **Project**：一个需要长期推进的真实项目目录。前端中一个 Project 对应一个 Story 看板页面。
-- **Harness**：Perpetuum 为 Project 保存的 Goal、队伍契约、Story、人类输入、报告、运行计划和状态，默认位于 `~/.perpetuum/projects/<project-id>/`。
+- **Harness**：Perpetuum 为 Project 保存的 Goal、队伍契约、Story、人类输入、运行计划和状态，默认位于 `~/.perpetuum/projects/<project-id>/`。
 - **Runner**：非 Agent 的本地后台服务。它解释 cron、创建顶层交互式 TUI、维护生命周期并提供前端，不做业务判断。
 - **Project Supervisor**：Runner 为某个项目的一次激活创建的临时管理 Agent。它选择至多一张 Story，并通过 `cc-use` 调用 Story Supervisor。
 - **Story Supervisor**：只服务一张 Story，是具体任务的 Supervisor；按 `team.md` 调度必选 Executor 和可选的 Validator、Explorer。
 - **Story**：唯一的业务工作粒度。一张卡片对应一个完整、可验证的业务成果和一条连续的 Agent 工作链。
-- **Reporter**：独立的日报 Agent；即使 Project 工作链异常，也会检查并报告运行情况。
 - **session**：由 tmux 承载的交互式 Agent TUI。每个父节点只管理自己明确创建并保存了精确名称的直属 session。
 - **Playbook**：某个角色的软性工作指南；它不是必须逐字发送的固定 Prompt。
 
@@ -35,11 +34,10 @@ Perpetuum 把真实项目目录组织成可长期运行的 Story 看板。本地
 | 初始化或注册项目 | [setup.md](references/setup.md)，再读 [story.md](references/story.md) 和 [runtime.md](references/runtime.md) |
 | 创建、查看或调整 Story | [story.md](references/story.md) |
 | 启动、停止、查看、暂停、恢复或调整 cron | [runtime.md](references/runtime.md) |
-| 处理人类指令、业务问题、管控异常或日报 | [human-communication.md](references/human-communication.md) |
+| 处理人类指令、业务问题或管控异常 | [human-communication.md](references/human-communication.md) |
 | 调整 Project Supervisor | [project-supervisor.md](references/playbooks/project-supervisor.md) |
 | 调整 Story 和 session 生命周期 | [story-supervisor.md](references/playbooks/story-supervisor.md) |
 | 调整执行、验证或后续探索 | [executor.md](references/playbooks/executor.md)、[validator.md](references/playbooks/validator.md)、[explorer.md](references/playbooks/explorer.md) |
-| 生成或检查日报 | [reporter.md](references/playbooks/reporter.md) |
 
 只读取与当前工作相关的参考，不要把全部文档无差别加载进上下文。
 
@@ -55,7 +53,7 @@ Perpetuum 把真实项目目录组织成可长期运行的 Story 看板。本地
 8. cron 只决定是否开始一次新的 Project 激活。已经开始的 Story 可以跨出 cron 匹配时间继续完成，不设置固定 Story 时长。
 9. Story 需要等待人类、管控处理或长期外部条件时，先把进展、证据、等待原因和恢复入口写入 Story 文件，再关闭本轮实际创建的下级角色和 Story Supervisor。恢复时仍是同一个 Story，但使用新的物理 session。
 10. 需要人类做业务选择时写入 `questions.md`；环境、权限、认证、进程、配额、磁盘、网络或基础设施问题写入 `escalations.md`。两者都要关联 Story ID，并写清背景、影响、证据、建议和人类需要做的最小决定。
-11. Runner 对每个新建的 Project Supervisor 或 Reporter 只发送一次中文启动 Prompt。启动、承载 session、项目路径和完成回执属于确定性边界；Story 选择、下级 Prompt 和具体工作方式由 Playbook、Harness 与真实结果决定。
+11. Runner 对每个新建的 Project Supervisor 只发送一次中文启动 Prompt。启动、承载 session、项目路径和完成回执属于确定性边界；Story 选择、下级 Prompt 和具体工作方式由 Playbook、Harness 与真实结果决定。
 12. 所有顶层 Agent 都使用交互式 TUI，不以 `codex exec`、Claude Code `-p` 或其他非交互模式代替。其他父 Supervisor 只在新建 session、收到实际结果、已启用角色返回反馈、人类补充决定或外部条件实质变化时发送 Prompt。
 13. 无人值守运行期间，不自动更新 Codex、Claude Code、模型或认证配置。遇到更新提示时跳过并继续；因此无法继续时记录管控异常。
 14. `project.yaml` 只记录 Agent 类型，`team.md` 记录业务角色编排，`schedule.yaml` 只记录时区和 cron 等运行控制。Runner 通过 `PATH` 解析真实可执行文件；下级 Agent 的运行细节由 cc-use 管理，不依赖 shell alias，也不写入项目配置。

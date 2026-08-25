@@ -36,7 +36,6 @@ class StorageTests(unittest.TestCase):
             self.assertTrue((harness / "inbox.md").is_file())
             self.assertTrue((harness / "questions.md").is_file())
             self.assertTrue((harness / "escalations.md").is_file())
-            self.assertTrue((harness / "reports" / "latest.md").is_file())
             self.assertTrue((harness / "runtime" / "state.json").is_file())
             self.assertTrue((harness / "runtime" / "events.log").is_file())
 

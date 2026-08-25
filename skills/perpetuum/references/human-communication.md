@@ -7,7 +7,6 @@
 | `inbox.md` | 业务面 | 人类补充 Goal、Story 优先级、资源和边界 |
 | `questions.md` | 业务面 | Story 需要人类做业务判断 |
 | `escalations.md` | 管控面 | 权限、认证、网络、磁盘、进程、配额或基础设施异常 |
-| `reports/*.md` | 汇报 | Reporter 生成可独立理解的项目日报 |
 
 人类输入由 Project Supervisor 在下一次激活时吸收。处理后保留原文，并写清处理时间、采取的动作、影响的 Story 和优先级变化。
 
@@ -34,9 +33,3 @@
 ## 外部等待
 
 等待 CI、review、数据发布或外部服务时，把 Story 标记为 `waiting_on: external`，正文写清等待对象、最近检查时间、恢复条件和下一步。长期等待不保留 TUI session。
-
-## 日报
-
-Reporter 独立检查 Story 看板、Questions、Escalations、运行状态和可信历史。日报要让数周没有关注项目的人也能理解：现在做到了什么、当前哪些 Story 正在等待、为什么等待、需要人类做什么、系统是否正常。
-
-本地前端负责聚合展示，不通过邮件、飞书或其他外部服务自动推送。

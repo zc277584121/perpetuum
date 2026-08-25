@@ -1,4 +1,4 @@
-"""Cron evaluation for project activation and daily reports."""
+"""Cron evaluation for project activation."""
 
 from __future__ import annotations
 
@@ -312,28 +312,3 @@ def next_schedule_check(now: Optional[datetime] = None) -> str:
     current = current.astimezone(timezone.utc)
     next_minute = current.replace(second=0, microsecond=0) + timedelta(minutes=1)
     return next_minute.isoformat().replace("+00:00", "Z")
-
-
-def report_due(
-    config: Dict[str, Any],
-    last_report_date: Optional[str],
-    now: Optional[datetime] = None,
-) -> bool:
-    report = config.get("report", {})
-    if not isinstance(report, dict) or not report.get("enabled", True):
-        return False
-    if report.get("force", False):
-        return True
-    current = local_now(str(config.get("timezone", "UTC")), now)
-    today = current.strftime("%Y-%m-%d")
-    if last_report_date == today:
-        return False
-    value = str(report.get("time", "09:00"))
-    try:
-        hour_text, minute_text = value.split(":", 1)
-        target = int(hour_text) * 60 + int(minute_text)
-        if not (0 <= int(hour_text) <= 23 and 0 <= int(minute_text) <= 59):
-            raise ValueError
-    except (TypeError, ValueError):
-        target = 9 * 60
-    return current.hour * 60 + current.minute >= target

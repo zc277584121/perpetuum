@@ -26,7 +26,6 @@ PROJECT_DOCUMENTS = {
     "inbox": ("inbox.md", 100_000),
     "questions": ("questions.md", 100_000),
     "escalations": ("escalations.md", 100_000),
-    "report": ("reports/latest.md", 100_000),
     "events": ("runtime/events.log", 200_000),
 }
 

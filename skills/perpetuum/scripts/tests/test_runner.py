@@ -62,7 +62,6 @@ class RunnerTests(unittest.TestCase):
                 completed = runner.reconcile_active(
                     active,
                     [project_id],
-                    storage.ensure_home(home),
                 )
 
             self.assertTrue(completed)
@@ -225,7 +224,6 @@ class RunnerTests(unittest.TestCase):
                 completed = runner.reconcile_active(
                     active,
                     [project_id],
-                    storage.ensure_home(home),
                 )
 
             self.assertTrue(completed)
@@ -256,10 +254,7 @@ class RunnerTests(unittest.TestCase):
                 runner,
                 "launch_project",
                 side_effect=active,
-            ) as launch, mock.patch(
-                "perpetuum_app.runner.scheduler.report_due",
-                return_value=False,
-            ):
+            ) as launch:
                 runner.tick()
 
             self.assertEqual(launch.call_count, 2)
@@ -290,10 +285,7 @@ class RunnerTests(unittest.TestCase):
                     "project_id": second,
                     "session": "second-session",
                 },
-            ) as launch, mock.patch(
-                "perpetuum_app.runner.scheduler.report_due",
-                return_value=False,
-            ):
+            ) as launch:
                 runner.tick()
 
             launch.assert_called_once()
@@ -321,7 +313,6 @@ class RunnerTests(unittest.TestCase):
             completed = runner.reconcile_active(
                 active,
                 [project_id],
-                storage.ensure_home(home),
             )
 
             self.assertTrue(completed)

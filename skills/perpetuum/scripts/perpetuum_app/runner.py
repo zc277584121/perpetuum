@@ -90,23 +90,6 @@ class Runner:
             "agent": {"kind": kind},
         }
 
-    def project_payloads(self, project_ids: List[str]) -> List[Dict[str, Any]]:
-        payloads = []
-        for project_id in project_ids:
-            try:
-                payload = self.project_payload(project_id)
-            except ValueError as exc:
-                self.write_control_escalation(
-                    project_id,
-                    "Runner 无法读取项目计划",
-                    str(exc),
-                    "请修正 schedule.yaml 后再使用“立即运行”验证。",
-                )
-                payload = None
-            if payload is not None:
-                payloads.append(payload)
-        return payloads
-
     def create_run(
         self,
         role: str,
@@ -129,15 +112,12 @@ class Runner:
                 self.skill_root / "references" / "human-communication.md"
             ),
         }
-        if role == "project":
-            references["project_supervisor"] = str(
-                playbooks / "project-supervisor.md"
-            )
-            references["story_supervisor"] = str(
-                playbooks / "story-supervisor.md"
-            )
-        else:
-            references["reporter"] = str(playbooks / "reporter.md")
+        references["project_supervisor"] = str(
+            playbooks / "project-supervisor.md"
+        )
+        references["story_supervisor"] = str(
+            playbooks / "story-supervisor.md"
+        )
         dispatch = {
             "version": 1,
             "role": role,
@@ -197,29 +177,6 @@ Harness：{project['harness']}
 - 无论成功、Idle、等待还是无法继续，都先关闭并复核自己创建的全部直属子 session，再更新项目状态。
 - 最后把一个 JSON 对象原子写入 {receipt_path}。至少包含 status、summary、project_id、finished_at；先写同目录临时文件，再重命名。
 - 写完回执后等待 Runner 回收当前 session，不要自行启动长期等待或定时 Prompt 循环。
-"""
-
-    def build_reporter_prompt(
-        self,
-        dispatch_path: Path,
-        receipt_path: Path,
-        carrier_session: str,
-    ) -> str:
-        playbook_path = (
-            self.skill_root / "references" / "playbooks" / "reporter.md"
-        )
-        return f"""你是本次 Perpetuum 激活的 Reporter。
-
-本次 dispatch：{dispatch_path}
-角色 Playbook：{playbook_path}
-完成回执：{receipt_path}
-当前承载 session：{carrier_session}
-
-先完整读取 dispatch、角色 Playbook 和其中要求的项目材料，再独立生成日报。不要启动业务 Story，也不要假设 Project Supervisor 必须成功运行后才能汇报。
-
-当前承载 session 由 Runner 创建和回收。只管理本次由你明确创建并保存了精确名称的直属子 session；不要关闭、接管或向当前承载 session 发送消息。不要因为时间经过或屏幕暂时没有变化发送固定 Prompt。
-
-完成全部报告并关闭直属子 session 后，把一个 JSON 对象原子写入 {receipt_path}。至少包含 status、summary、projects、finished_at；先写同目录临时文件，再重命名。写完后等待 Runner 回收当前 session。
 """
 
     def launch_project(
@@ -303,75 +260,10 @@ Harness：{project['harness']}
         )
         return active
 
-    def launch_reporter(
-        self,
-        project_ids: List[str],
-        config: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
-        projects = self.project_payloads(project_ids)
-        if not projects:
-            return None
-        carrier_session = sessions.session_name("reporter")
-        run_dir, dispatch_path, receipt_path, run_id = self.create_run(
-            "reporter",
-            carrier_session,
-            {"projects": projects},
-        )
-        kind = str(projects[0]["agent"].get("kind", "codex"))
-        startup_seconds = int(
-            config.get("service", {}).get("agent_startup_seconds", 8)
-        )
-        prompt = self.build_reporter_prompt(
-            dispatch_path,
-            receipt_path,
-            carrier_session,
-        )
-        try:
-            command = sessions.agent_command(kind)
-            session = sessions.launch_session(
-                role="reporter",
-                command=command,
-                cwd=Path(projects[0]["path"]),
-                prompt=prompt,
-                startup_seconds=startup_seconds,
-                kind=kind,
-                name=carrier_session,
-            )
-        except Exception as exc:
-            self.cleanup_run_dir(run_dir)
-            for project in projects:
-                self.write_control_escalation(
-                    project["id"],
-                    "无法启动 Reporter session",
-                    str(exc),
-                    "请检查 tmux、Agent TUI、环境变量和认证，再手动请求日报验证。",
-                )
-            self.state["last_error"] = str(exc)
-            self.event("reporter_session_launch_failed", error=str(exc))
-            return None
-        active = {
-            "role": "reporter",
-            "run_id": run_id,
-            "session": session,
-            "project_ids": [project["id"] for project in projects],
-            "dispatch_path": str(dispatch_path),
-            "receipt_path": str(receipt_path),
-            "run_dir": str(run_dir),
-            "started_at": storage.utc_now(),
-        }
-        self.event(
-            "reporter_session_started",
-            run_id=run_id,
-            session=session,
-            project_ids=active["project_ids"],
-        )
-        return active
-
     def reconcile_active(
         self,
         active: Dict[str, Any],
         project_ids: List[str],
-        config: Dict[str, Any],
     ) -> bool:
         session = str(active.get("session", ""))
         receipt_path = Path(str(active.get("receipt_path", "")))
@@ -395,9 +287,6 @@ Harness：{project['harness']}
                 project_ids=project_ids,
                 receipt=receipt,
             )
-            if role == "reporter":
-                local = scheduler.local_now(str(config.get("timezone", "UTC")))
-                self.state["last_report_date"] = local.strftime("%Y-%m-%d")
             self.cleanup_run_dir(run_dir)
             return True
         if owned_session and sessions.session_exists(session):
@@ -422,13 +311,10 @@ Harness：{project['harness']}
             session=session,
             project_ids=project_ids,
         )
-        if role == "reporter":
-            local = scheduler.local_now(str(config.get("timezone", "UTC")))
-            self.state["last_report_date"] = local.strftime("%Y-%m-%d")
         self.cleanup_run_dir(run_dir)
         return True
 
-    def reconcile_projects(self, config: Dict[str, Any]) -> None:
+    def reconcile_projects(self) -> None:
         active_projects = self.state.setdefault("active_projects", {})
         if not isinstance(active_projects, dict):
             active_projects = {}
@@ -437,22 +323,8 @@ Harness：{project['harness']}
             if not isinstance(active, dict) or self.reconcile_active(
                 active,
                 [project_id],
-                config,
             ):
                 active_projects.pop(project_id, None)
-
-    def reconcile_reporter(self, config: Dict[str, Any]) -> None:
-        active = self.state.get("active_reporter")
-        if not isinstance(active, dict):
-            return
-        raw_project_ids = active.get("project_ids", [])
-        project_ids = (
-            [str(value) for value in raw_project_ids]
-            if isinstance(raw_project_ids, list)
-            else []
-        )
-        if self.reconcile_active(active, project_ids, config):
-            self.state["active_reporter"] = None
 
     def write_control_escalation(
         self,
@@ -481,7 +353,7 @@ Harness：{project['harness']}
             "需要先确认底层原因。\n\n"
             f"**人类需要做什么**\n\n{action}\n\n"
             "**恢复验证**\n\n处理后触发一次项目运行，确认 Project 与 Story 链路"
-            "能够写入完成回执，并在日报中出现可信结果。\n\n"
+            "能够写入可信完成回执。\n\n"
             f"**原始状态**\n\n- Runner 日志：`{storage.runner_events_path(self.home)}`\n"
             f"- 项目运行日志：`{harness / 'runtime' / 'events.log'}`\n"
         )
@@ -524,21 +396,13 @@ Harness：{project['harness']}
         errors.pop(project_id, None)
         return schedule
 
-    def clear_report_force(self) -> None:
-        current = storage.ensure_home(self.home)
-        report = current.get("report", {})
-        if isinstance(report, dict) and report.get("force", False):
-            report["force"] = False
-            storage.write_json(storage.activation_path(self.home), current)
-
     def tick(self) -> None:
         config = storage.ensure_home(self.home)
         now = datetime.now(timezone.utc)
         self.state["last_tick_at"] = storage.utc_now()
         self.state["next_schedule_check_at"] = scheduler.next_schedule_check(now)
 
-        self.reconcile_projects(config)
-        self.reconcile_reporter(config)
+        self.reconcile_projects()
 
         service = config.get("service", {})
         if service.get("stop_requested", False) or service.get(
@@ -579,19 +443,6 @@ Harness：{project['harness']}
             if active is not None:
                 active_projects[project_id] = active
 
-        if (
-            scheduler.report_due(config, self.state.get("last_report_date"), now)
-            and not self.state.get("active_reporter")
-        ):
-            project_ids = storage.list_project_ids(self.home)
-            active = self.launch_reporter(project_ids, config)
-            if active:
-                self.state["active_reporter"] = active
-            else:
-                local = scheduler.local_now(str(config.get("timezone", "UTC")), now)
-                self.state["last_report_date"] = local.strftime("%Y-%m-%d")
-            self.clear_report_force()
-
         self.state["last_error"] = None
         self.save_state()
 
@@ -600,7 +451,7 @@ Harness：{project['harness']}
         service = config.get("service", {})
         if self.force_stop:
             return "stop"
-        if self.state.get("active_projects") or self.state.get("active_reporter"):
+        if self.state.get("active_projects"):
             return None
         if service.get("restart_requested", False):
             return "restart"
@@ -626,14 +477,6 @@ Harness：{project['harness']}
                     "确认没有遗留的子 session 或半完成业务变更，再重新启动服务并手动触发项目验证。",
                 )
             self.state["active_projects"] = {}
-        active_reporter = self.state.get("active_reporter")
-        if isinstance(active_reporter, dict):
-            session = str(active_reporter.get("session", ""))
-            if sessions.is_owned_top_session(
-                session, "reporter"
-            ) and sessions.session_exists(session):
-                sessions.kill_session(session)
-            self.state["active_reporter"] = None
 
 
 def reset_service_request(home: Path, key: str) -> None:

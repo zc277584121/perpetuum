@@ -25,14 +25,12 @@ const documentDefinitions = {
   inbox: {label: "Inbox", path: "inbox.md", access: "追加写入"},
   questions: {label: "业务问题", path: "questions.md", access: "追加回复"},
   escalations: {label: "管控异常", path: "escalations.md", access: "追加回复"},
-  report: {label: "最新日报", path: "reports/latest.md", access: "只读"},
   events: {label: "运行事件", path: "runtime/events.log", access: "只读"},
 };
 
 const drawerDefinitions = {
   attention: {kicker: "需要介入", title: "待处理", description: "集中处理业务判断和管控异常。"},
   inbox: {kicker: "业务输入", title: "补充项目方向", description: "新的要求会在 Project Supervisor 下次激活时被读取。"},
-  report: {kicker: "项目汇报", title: "最新日报", description: "查看最近一次独立 Reporter 汇总。"},
   documents: {kicker: "项目资料", title: "资料与历史", description: "按需读取 Goal、历史、通信文件和运行事件。"},
   settings: {kicker: "项目管控", title: "运行设置", description: "调整工作时间并查看 Agent 与 Session 状态。"},
   archive: {kicker: "看板历史", title: "已归档 Story", description: "查看较早完成、手工归档或已经取消的卡片。"},
@@ -341,18 +339,13 @@ function hasPendingContent(content) {
     .trim().length > 0;
 }
 
-function withoutTopHeading(markdown) {
-  return String(markdown || "").replace(/^\s*#\s+[^\n]+\n?/, "").trim();
-}
-
 function renderService() {
   const runner = state.status?.runner || {};
   const service = runner.service || {};
   const alive = Boolean(service.alive);
   document.getElementById("service-dot").className = `status-dot ${alive ? "online" : "offline"}`;
   document.getElementById("service-status").textContent = alive ? "Runner 运行中" : "Runner 已停止";
-  const activeProjects = Object.keys(runner.active_projects || {}).length;
-  const active = activeProjects + Number(Boolean(runner.active_reporter));
+  const active = Object.keys(runner.active_projects || {}).length;
   document.getElementById("service-detail").textContent = active
     ? `${active} 条顶层工作链活跃`
     : `下次检查 ${formatTime(runner.next_schedule_check_at)}`;
@@ -638,7 +631,6 @@ function renderRuntimeDetails() {
     ["工作阶段", runtime.story_phase ? phaseLabel(runtime.story_phase) : "无"],
     ["Story Session", sessionSummary],
     ["Project Supervisor", summary.project_session || "空闲"],
-    ["Reporter", runner.active_reporter ? "活跃" : "空闲"],
     ["Runner 下次检查", formatTime(runner.next_schedule_check_at)],
   ]);
 }
@@ -693,15 +685,6 @@ async function renderAttentionDrawer() {
   });
 }
 
-async function renderReportDrawer() {
-  const report = await loadDocument("report", true);
-  renderMarkdown(
-    document.getElementById("latest-report"),
-    withoutTopHeading(report.content),
-    "尚未生成日报。",
-  );
-}
-
 function renderDocumentTabs() {
   const tabs = document.getElementById("document-tabs");
   tabs.replaceChildren();
@@ -754,8 +737,6 @@ async function openProjectDrawer(view) {
   try {
     if (view === "attention") {
       await renderAttentionDrawer();
-    } else if (view === "report") {
-      await renderReportDrawer();
     } else if (view === "documents") {
       await renderDocumentsDrawer();
     } else if (view === "settings") {

@@ -124,6 +124,6 @@ question_ids:
 
 ## 渐进式披露
 
-Project Supervisor 和已启用的 Explorer 默认先使用 `story list --json` 读取全部卡片元数据，再读取当前 Story 或少量高优先级候选的正文。Executor 和已启用的 Validator 只读取当前 Story。Reporter 先读取全部元数据，再按日报需要打开当前、等待、最近完成或异常 Story。
+Project Supervisor 和已启用的 Explorer 默认先使用 `story list --json` 读取全部卡片元数据，再读取当前 Story 或少量高优先级候选的正文。Executor 和已启用的 Validator 只读取当前 Story。
 
 脚本只保证格式、校验、原子更新和排序；它不判断哪个 Story 更有价值。Story 的创建、优先级、边界和取舍仍由 Agent 根据 Goal、历史、证据和人类输入判断。

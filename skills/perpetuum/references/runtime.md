@@ -22,13 +22,12 @@
     ├── inbox.md
     ├── questions.md
     ├── escalations.md
-    ├── reports/
     └── runtime/
         ├── state.json
         └── events.log
 ```
 
-`activation.yaml` 只保存全局服务、Reporter 和项目注册；`project.yaml` 保存项目目录与 Agent 类型；`team.md` 保存用户确认的角色编排；`schedule.yaml` 保存该项目自己的运行计划；`runner/runs/` 是一次顶层调用的临时交接目录，完成后清理。
+`activation.yaml` 只保存全局服务和项目注册；`project.yaml` 保存项目目录与 Agent 类型；`team.md` 保存用户确认的角色编排；`schedule.yaml` 保存该项目自己的运行计划；`runner/runs/` 是一次顶层调用的临时交接目录，完成后清理。
 
 ## 项目运行计划
 
@@ -97,7 +96,7 @@ cron 只限制新的激活开始。已经启动的 Story 可以跨出匹配时�
 
 `story_phase` 可以是 `executing`、`validating` 或 `exploring`；未启用对应可选角色时不会进入其阶段。`active_sessions` 是各层尽力记录，不是 cc-use 或 tmux 的全局权威清单，也不授予关闭权限。每个父 Supervisor 仍须在创建直属角色时保存 `start` 返回的精确名称，并在关闭时把 `finish` 的结构化结果追加到 `runtime/events.log`；列表中不存在只能说明当前不可见，不能证明曾经 graceful 关闭。
 
-Runner 的 `state.json` 使用 `active_projects` 按项目记录顶层 Project Supervisor，因此不同项目可以并行；`active_reporter` 独立记录 Reporter。
+Runner 的 `state.json` 使用 `active_projects` 按项目记录顶层 Project Supervisor，因此不同项目可以并行。
 
 ## 等待时关闭
 
@@ -126,8 +125,6 @@ Project Supervisor 的业务调度是软性的：根据 Playbook、Story 看板�
 <skill-directory>/scripts/perpetuum status
 <skill-directory>/scripts/perpetuum project list
 <skill-directory>/scripts/perpetuum project schedule <project-id> "*/5 0-5 * * *" --timezone Asia/Shanghai
-<skill-directory>/scripts/perpetuum reporter pause
-<skill-directory>/scripts/perpetuum reporter resume
 <skill-directory>/scripts/perpetuum story list <project-id> --json
 <skill-directory>/scripts/perpetuum stop
 ```

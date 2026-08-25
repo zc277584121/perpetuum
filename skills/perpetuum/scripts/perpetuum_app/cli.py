@@ -196,10 +196,8 @@ def stop_service(home: Path, force: bool) -> int:
         time.sleep(0.25)
     state = load_state(home)
     active_projects = state.get("active_projects", {})
-    active_reporter = state.get("active_reporter")
-    if active_projects or active_reporter:
+    if active_projects:
         count = len(active_projects) if isinstance(active_projects, dict) else 0
-        count += int(bool(active_reporter))
         print(
             "Perpetuum 正在等待当前顶层工作完成，之后会自动停止。"
             f" 当前活跃链路：{count}"
@@ -224,10 +222,8 @@ def restart_service(home: Path, host: Optional[str], port: Optional[int]) -> int
     update_service_config(home, **changes)
     state = load_state(home)
     active_projects = state.get("active_projects", {})
-    active_reporter = state.get("active_reporter")
-    if active_projects or active_reporter:
+    if active_projects:
         count = len(active_projects) if isinstance(active_projects, dict) else 0
-        count += int(bool(active_reporter))
         print(
             "已请求重启。服务会等待当前顶层工作完成后原地重启；"
             f"当前活跃链路：{count}"
@@ -249,16 +245,7 @@ def print_status(home: Path, as_json: bool) -> int:
         print(f"PID：{service.get('pid')}")
         print(f"前端：{service.get('url')}")
     active_projects = status["runner"].get("active_projects", {})
-    active_reporter = status["runner"].get("active_reporter")
-    report_config = status["activation"].get("report", {})
     print(f"Project Supervisor：{len(active_projects)} 个活跃")
-    if active_reporter:
-        reporter_status = active_reporter.get("session")
-    elif not report_config.get("enabled", True):
-        reporter_status = "已暂停"
-    else:
-        reporter_status = f"空闲（计划 {report_config.get('time', '未设置')}）"
-    print(f"Reporter：{reporter_status}")
     print(f"项目数：{len(status['projects'])}")
     for project in status["projects"]:
         pause = "（已暂停）" if project.get("paused") else ""
@@ -464,30 +451,6 @@ def story_archive(home: Path, project_id: str, story_id: str) -> int:
     return 0
 
 
-def request_report(home: Path) -> int:
-    config = storage.ensure_home(home)
-    report = config.setdefault("report", {})
-    report["force"] = True
-    storage.write_json(storage.activation_path(home), config)
-    print("已请求生成日报。")
-    return 0
-
-
-def reporter_control(home: Path, action: str) -> int:
-    if action not in {"pause", "resume"}:
-        print(f"不支持的 Reporter 操作：{action}", file=sys.stderr)
-        return 2
-    config = storage.ensure_home(home)
-    report = config.setdefault("report", {})
-    report["enabled"] = action == "resume"
-    if action == "pause":
-        report["force"] = False
-    storage.write_json(storage.activation_path(home), config)
-    label = "暂停" if action == "pause" else "恢复"
-    print(f"Reporter 已{label}；该操作只影响新的 Reporter 激活。")
-    return 0
-
-
 def doctor(home: Path) -> int:
     storage.ensure_home(home)
     checks = {
@@ -533,15 +496,6 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--json", action="store_true")
 
     subparsers.add_parser("doctor", help="检查本地依赖")
-    subparsers.add_parser("report", help="立即请求日报")
-
-    reporter = subparsers.add_parser("reporter", help="管理全局 Reporter")
-    reporter_subparsers = reporter.add_subparsers(
-        dest="reporter_command",
-        required=True,
-    )
-    reporter_subparsers.add_parser("pause", help="暂停新的 Reporter 激活")
-    reporter_subparsers.add_parser("resume", help="恢复 Reporter 计划")
 
     project = subparsers.add_parser("project", help="管理项目")
     project_subparsers = project.add_subparsers(dest="project_command", required=True)
@@ -633,10 +587,6 @@ def main() -> None:
         raise SystemExit(print_status(home, args.json))
     if args.command == "doctor":
         raise SystemExit(doctor(home))
-    if args.command == "report":
-        raise SystemExit(request_report(home))
-    if args.command == "reporter":
-        raise SystemExit(reporter_control(home, args.reporter_command))
     if args.command == "project":
         if args.project_command == "add":
             raise SystemExit(project_add(args, home))

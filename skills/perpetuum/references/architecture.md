@@ -11,7 +11,6 @@ Local Runner / Frontend Service
         │               └── Explorer（按 team.md 可选）
         ├── Project Supervisor B
         │       └── Story Supervisor → ...
-        └── Reporter
 ```
 
 Project 是真实项目目录；Harness 是该项目在 `~/.perpetuum/projects/<project-id>/` 下的长期运行资料。`team.md` 保存用户确认的角色拓扑和完成门槛。一个 Project 在前端对应一个看板页面，一个 Story 文件对应一张卡片。
@@ -37,7 +36,6 @@ Project Supervisor 收到 Prompt 后，根据 Playbook、`team.md`、Harness 和
 - **Executor**：完成当前 Story。正常情况下一个 Story 只创建一个 Executor session，并允许跨天、多轮持续工作。
 - **Validator**：可选的独立验收者。启用时先从 Goal、Story 和用户约束形成自己的风险模型，再检查产物；不把 Executor 的解释、unit test 或 smoke test 结论当作验收结论。
 - **Explorer**：可选的未来工作探索者。只在 `team.md` 配置的触发点，根据事实研究差距并维护未来 Story。
-- **Reporter**：独立于 Project 工作链的每日检查 Agent，分别为每个项目写日报。
 
 ## Story 工作链
 
@@ -77,7 +75,7 @@ Story 的 front matter 保存看板元数据，正文保存完整背景、边界
 
 ## 调用和所有权
 
-Runner 直接创建 Project Supervisor 和 Reporter 的顶层 TUI，因为 Runner 不是 Agent。Project Supervisor 以下的所有 Agent 上下级调用都使用当前安装的 `cc-use` Skill。Perpetuum 只用自然语言说明要创建、观察或关闭哪一个下级 session，不保存或复制 cc-use 的具体命令和参数。
+Runner 直接创建 Project Supervisor 的顶层 TUI，因为 Runner 不是 Agent。Project Supervisor 以下的所有 Agent 上下级调用都使用当前安装的 `cc-use` Skill。Perpetuum 只用自然语言说明要创建、观察或关闭哪一个下级 session，不保存或复制 cc-use 的具体命令和参数。
 
 每个 Supervisor 都运行在上级为它创建的承载 session 中，同时可以为下级创建直属子 session。当前承载 session 不属于它自己管理；每个父节点只管理本次由自己明确创建并保存了精确名称的直属子 session。全局 session 列表和项目状态只能用于观察，不能证明所有权。
 
@@ -94,4 +92,4 @@ Runner 直接创建 Project Supervisor 和 Reporter 的顶层 TUI，因为 Runne
 5. 若 Explorer 已启用且满足触发条件，由它基于结果维护下一轮 Story 池。
 6. 下一次 cron 匹配时重复。若空看板 Explorer 按契约创建的是当前已到期的 `ready` Story，Project Supervisor 可以在本次激活中重新读取并立即选择；尚未到期或仅为候选的 Story 留待后续激活。
 
-没有可运行 Story 时，Project Supervisor 只在队伍契约配置了该触发点时调用一次 Explorer；否则项目直接进入 Idle，由日报说明即可。
+没有可运行 Story 时，Project Supervisor 只在队伍契约配置了该触发点时调用一次 Explorer；否则项目直接进入 Idle。

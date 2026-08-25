@@ -50,12 +50,11 @@ def session_exists(name: str) -> bool:
 
 
 def is_owned_top_session(name: str, role: str) -> bool:
-    if role not in {"project", "reporter"}:
+    if role != "project":
         return False
-    identity = r"-[A-Za-z0-9_-]{1,32}" if role == "project" else ""
     return bool(
         re.fullmatch(
-            rf"perpetuum-{role}{identity}-\d{{8}}-\d{{6}}-[0-9a-f]{{6}}",
+            r"perpetuum-project-[A-Za-z0-9_-]{1,32}-\d{8}-\d{6}-[0-9a-f]{6}",
             name,
         )
     )
