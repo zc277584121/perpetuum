@@ -96,7 +96,23 @@ cron 只限制新的激活开始。已经启动的 Story 可以跨出匹配时�
 
 `story_phase` 可以是 `executing`、`validating` 或 `exploring`；未启用对应可选角色时不会进入其阶段。`active_sessions` 是各层尽力记录，不是 cc-use 或 tmux 的全局权威清单，也不授予关闭权限。每个父 Supervisor 仍须在创建直属角色时保存 `start` 返回的精确名称，并在关闭时把 `finish` 的结构化结果追加到 `runtime/events.log`；列表中不存在只能说明当前不可见，不能证明曾经 graceful 关闭。
 
-Runner 的 `state.json` 使用 `active_projects` 按项目记录顶层 Project Supervisor，因此不同项目可以并行。
+Runner 的 `state.json` 使用 `active_projects` 按项目记录顶层 Project Supervisor，因此不同项目可以并行。顶层 tmux session 只是本次激活的 carrier；完成回执才是整条 ownership chain 正常结束的权威信号。
+
+顶层 carrier 消失但回执尚未出现时，Runner 在对应的 `active_projects` 记录中按需持久化：
+
+```json
+{
+  "carrier_missing_since": "...",
+  "top_session_orphaned_at": "...",
+  "chain_settled_since": "..."
+}
+```
+
+首次发现 carrier 消失时，Runner 记录 `carrier_missing_since` 和 `top_session_missing`，继续保留项目活动锁与本次运行目录。五分钟后仍没有回执时记录 `top_session_orphaned`，但下层 Story Supervisor、Executor 或其他直属角色仍可能继续运行，因此不会仅凭 carrier 消失释放项目。
+
+Runner 只在项目 `runtime/state.json` 提供了 carrier 消失之后的新证据时开始认定 ownership chain 已经稳定：`last_activity_at` 严格晚于 `carrier_missing_since`、`current_story` 为空、`active_sessions` 为空，并且 `status` 是 `idle`、`waiting_human` 或 `control_blocked`。满足这些条件后记录 `chain_settled_since`；条件中途不再满足时清除该时间并重新等待。稳定状态连续保持五分钟且仍无回执时，Runner 写入 control escalation、释放项目活动锁，并保留完整运行目录作为调查证据。旧的 idle 状态、`working` 状态、仍有 `current_story` 或 `active_sessions` 的状态都不能触发自动释放。
+
+回执检查始终先于这些丢失状态。即使 carrier 已经 orphaned 或 ownership chain 已进入稳定等待，延迟到达的回执仍会正常完成本次激活并清理运行目录。carrier 在释放前恢复时，Runner 清除 `carrier_missing_since`、`top_session_orphaned_at` 和 `chain_settled_since`，继续按正常活动 session 管理。
 
 ## 等待时关闭
 

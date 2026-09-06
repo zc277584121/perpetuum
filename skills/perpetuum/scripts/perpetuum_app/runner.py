@@ -9,12 +9,17 @@ import signal
 import sys
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import scheduler, sessions, storage
 from .server import RuntimeServer
+
+
+TOP_SESSION_MISSING_GRACE = timedelta(minutes=5)
+CHAIN_SETTLED_GRACE = timedelta(minutes=5)
+STABLE_PROJECT_STATUSES = {"idle", "waiting_human", "control_blocked"}
 
 
 class Runner:
@@ -37,6 +42,25 @@ class Runner:
 
     def event(self, event: str, **fields: Any) -> None:
         storage.append_event(storage.runner_events_path(self.home), event, **fields)
+
+    def current_time(self) -> datetime:
+        return datetime.now(timezone.utc)
+
+    @staticmethod
+    def format_time(value: datetime) -> str:
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    @staticmethod
+    def parse_time(value: Any) -> Optional[datetime]:
+        if not isinstance(value, str) or not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return None
+        return parsed.astimezone(timezone.utc)
 
     def safe_run_dir(self, run_dir: Path) -> bool:
         root = (storage.runner_dir(self.home) / "runs").resolve()
@@ -289,19 +313,110 @@ Harness：{project['harness']}
             )
             self.cleanup_run_dir(run_dir)
             return True
-        if owned_session and sessions.session_exists(session):
+
+        if not valid_receipt or not owned_session:
+            for project_id in project_ids:
+                self.write_control_escalation(
+                    project_id,
+                    f"{role} 运行元数据无效",
+                    (
+                        f"Runner 无法安全核验 tmux session {session} 与回执路径"
+                        f" {receipt_path}。"
+                    ),
+                    "请检查 runner/events.log 和 runner/state.json，确认运行记录没有损坏。",
+                )
+            self.event(
+                "top_session_lost",
+                role=role,
+                run_id=active.get("run_id"),
+                session=session,
+                project_ids=project_ids,
+                reason="invalid_metadata",
+            )
+            self.cleanup_run_dir(run_dir)
+            return True
+
+        if sessions.session_exists(session):
+            recovered = any(
+                field in active
+                for field in (
+                    "carrier_missing_since",
+                    "top_session_orphaned_at",
+                    "chain_settled_since",
+                )
+            )
+            active.pop("carrier_missing_since", None)
+            active.pop("top_session_orphaned_at", None)
+            active.pop("chain_settled_since", None)
+            if recovered:
+                self.event(
+                    "top_session_recovered",
+                    role=role,
+                    run_id=active.get("run_id"),
+                    session=session,
+                    project_ids=project_ids,
+                )
             return False
+
+        now = self.current_time()
+        missing_since = self.parse_time(active.get("carrier_missing_since"))
+        if missing_since is None:
+            active["carrier_missing_since"] = self.format_time(now)
+            active.pop("top_session_orphaned_at", None)
+            active.pop("chain_settled_since", None)
+            self.event(
+                "top_session_missing",
+                role=role,
+                run_id=active.get("run_id"),
+                session=session,
+                project_ids=project_ids,
+            )
+            return False
+
+        if now < missing_since + TOP_SESSION_MISSING_GRACE:
+            return False
+
+        if "top_session_orphaned_at" not in active:
+            active["top_session_orphaned_at"] = self.format_time(now)
+            self.event(
+                "top_session_orphaned",
+                role=role,
+                run_id=active.get("run_id"),
+                session=session,
+                project_ids=project_ids,
+            )
+
+        project_states = [
+            storage.load_project_state(self.home, project_id)
+            for project_id in project_ids
+        ]
+        chain_settled = bool(project_states) and all(
+            self.project_chain_is_settled(project_state, missing_since)
+            for project_state in project_states
+        )
+        if not chain_settled:
+            active.pop("chain_settled_since", None)
+            return False
+
+        settled_since = self.parse_time(active.get("chain_settled_since"))
+        if settled_since is None:
+            active["chain_settled_since"] = self.format_time(now)
+            return False
+        if now < settled_since + CHAIN_SETTLED_GRACE:
+            return False
+
         for project_id in project_ids:
             self.write_control_escalation(
                 project_id,
-                f"{role} session 在写入完成回执前消失",
+                f"{role} session 消失且稳定链路未写入完成回执",
                 (
-                    f"Runner 检查到 tmux session {session} 已不存在，"
-                    f"且没有找到回执文件 {receipt_path}。"
+                    f"Runner 检查到 tmux session {session} 已不存在；项目运行状态在"
+                    " carrier 消失后更新到稳定状态并持续五分钟，但仍没有找到回执文件"
+                    f" {receipt_path}。运行目录将保留作为证据。"
                 ),
                 (
-                    "请查看 runner/events.log 和项目 runtime/events.log，确认是否存在 TUI 退出、"
-                    "认证、环境变量或人工关闭 session 的问题；处理后重新触发项目验证。"
+                    "请查看 runner/events.log、保留的运行目录和项目 runtime/events.log，"
+                    "确认回执为何缺失以及是否存在遗留的下层 session。"
                 ),
             )
         self.event(
@@ -310,9 +425,26 @@ Harness：{project['harness']}
             run_id=active.get("run_id"),
             session=session,
             project_ids=project_ids,
+            reason="chain_settled_without_receipt",
+            run_dir=str(run_dir),
         )
-        self.cleanup_run_dir(run_dir)
         return True
+
+    def project_chain_is_settled(
+        self,
+        project_state: Dict[str, Any],
+        missing_since: datetime,
+    ) -> bool:
+        last_activity_at = self.parse_time(project_state.get("last_activity_at"))
+        active_sessions = project_state.get("active_sessions")
+        return (
+            last_activity_at is not None
+            and last_activity_at > missing_since
+            and project_state.get("current_story") is None
+            and isinstance(active_sessions, list)
+            and not active_sessions
+            and project_state.get("status") in STABLE_PROJECT_STATUSES
+        )
 
     def reconcile_projects(self) -> None:
         active_projects = self.state.setdefault("active_projects", {})

@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
 import unittest
@@ -20,6 +21,51 @@ class RunnerTests(unittest.TestCase):
             crons=["* * * * *"],
         )
         return home, project_id
+
+    def make_active(self, runner, project_id):
+        project = runner.project_payload(project_id)
+        session = f"perpetuum-project-{project_id[:32]}-20260812-120000-a1b2c3"
+        run_dir, dispatch, receipt, run_id = runner.create_run(
+            "project",
+            session,
+            {
+                "project": project,
+                "trigger": {"reason": "manual", "triggered_at": storage.utc_now()},
+            },
+        )
+        active = {
+            "role": "project",
+            "run_id": run_id,
+            "session": session,
+            "project_id": project_id,
+            "dispatch_path": str(dispatch),
+            "receipt_path": str(receipt),
+            "run_dir": str(run_dir),
+        }
+        return active, run_dir, receipt
+
+    def write_project_state(
+        self,
+        home,
+        project_id,
+        *,
+        status,
+        current_story,
+        active_sessions,
+        last_activity_at,
+    ):
+        storage.write_json(
+            storage.project_dir(home, project_id) / "runtime" / "state.json",
+            {
+                "version": 1,
+                "status": status,
+                "current_story": current_story,
+                "story_phase": None,
+                "active_sessions": active_sessions,
+                "last_activity_at": last_activity_at,
+                "last_result": "test",
+            },
+        )
 
     def test_receipt_completes_project_session_without_screen_parsing(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -192,47 +238,243 @@ class RunnerTests(unittest.TestCase):
             self.assertIn("无法启动 Project Supervisor session", escalation)
             self.assertIn("codex executable not found", escalation)
 
-    def test_missing_receipt_creates_control_escalation(self):
+    def test_first_missing_carrier_keeps_active_project_and_run_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home, project_id = self.make_project(root)
             runner = Runner(home)
-            project = runner.project_payload(project_id)
-            session = f"perpetuum-project-{project_id[:32]}-20260812-120000-a1b2c3"
-            run_dir, dispatch, receipt, run_id = runner.create_run(
-                "project",
-                session,
-                {
-                    "project": project,
-                    "trigger": {"reason": "manual", "triggered_at": storage.utc_now()},
-                },
-            )
-            active = {
-                "role": "project",
-                "run_id": run_id,
-                "session": session,
-                "project_id": project_id,
-                "dispatch_path": str(dispatch),
-                "receipt_path": str(receipt),
-                "run_dir": str(run_dir),
-            }
+            active, run_dir, _receipt = self.make_active(runner, project_id)
+            runner.state["active_projects"] = {project_id: active}
+            now = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
 
             with mock.patch(
                 "perpetuum_app.runner.sessions.session_exists",
                 return_value=False,
+            ), mock.patch.object(
+                runner,
+                "current_time",
+                return_value=now,
+            ), mock.patch.object(
+                runner,
+                "write_control_escalation",
+            ) as escalate, mock.patch.object(runner, "event") as event:
+                runner.reconcile_projects()
+
+            self.assertIn(project_id, runner.state["active_projects"])
+            self.assertEqual(active["carrier_missing_since"], "2026-09-06T12:00:00Z")
+            self.assertNotIn("top_session_orphaned_at", active)
+            self.assertTrue(run_dir.is_dir())
+            escalate.assert_not_called()
+            event.assert_called_once_with(
+                "top_session_missing",
+                role="project",
+                run_id=active["run_id"],
+                session=active["session"],
+                project_ids=[project_id],
+            )
+
+    def test_active_child_chain_never_releases_or_starts_settled_grace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, project_id = self.make_project(root)
+            runner = Runner(home)
+            active, run_dir, _receipt = self.make_active(runner, project_id)
+            missing_at = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
+
+            with mock.patch(
+                "perpetuum_app.runner.sessions.session_exists",
+                return_value=False,
+            ), mock.patch.object(runner, "current_time", return_value=missing_at):
+                self.assertFalse(runner.reconcile_active(active, [project_id]))
+
+            self.write_project_state(
+                home,
+                project_id,
+                status="working",
+                current_story="S-001",
+                active_sessions=["story-session"],
+                last_activity_at="2026-09-06T12:06:00Z",
+            )
+            much_later = missing_at + timedelta(days=2)
+            with mock.patch(
+                "perpetuum_app.runner.sessions.session_exists",
+                return_value=False,
+            ), mock.patch.object(
+                runner,
+                "current_time",
+                return_value=much_later,
+            ), mock.patch.object(
+                runner,
+                "write_control_escalation",
+            ) as escalate:
+                completed = runner.reconcile_active(active, [project_id])
+
+            self.assertFalse(completed)
+            self.assertIn("top_session_orphaned_at", active)
+            self.assertNotIn("chain_settled_since", active)
+            self.assertTrue(run_dir.is_dir())
+            escalate.assert_not_called()
+
+    def test_delayed_receipt_completes_after_carrier_is_orphaned(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, project_id = self.make_project(root)
+            runner = Runner(home)
+            active, run_dir, receipt = self.make_active(runner, project_id)
+            missing_at = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
+
+            with mock.patch(
+                "perpetuum_app.runner.sessions.session_exists",
+                return_value=False,
+            ), mock.patch.object(runner, "current_time", return_value=missing_at):
+                self.assertFalse(runner.reconcile_active(active, [project_id]))
+            with mock.patch(
+                "perpetuum_app.runner.sessions.session_exists",
+                return_value=False,
+            ), mock.patch.object(
+                runner,
+                "current_time",
+                return_value=missing_at + timedelta(minutes=5),
             ):
-                completed = runner.reconcile_active(
-                    active,
-                    [project_id],
-                )
+                self.assertFalse(runner.reconcile_active(active, [project_id]))
+
+            storage.write_json(
+                receipt,
+                {
+                    "status": "completed",
+                    "summary": "late completion",
+                    "project_id": project_id,
+                    "finished_at": "2026-09-06T12:06:00Z",
+                },
+            )
+            with mock.patch(
+                "perpetuum_app.runner.sessions.session_exists",
+                return_value=False,
+            ), mock.patch.object(runner, "write_control_escalation") as escalate:
+                completed = runner.reconcile_active(active, [project_id])
 
             self.assertTrue(completed)
+            self.assertFalse(run_dir.exists())
+            escalate.assert_not_called()
+
+    def test_settled_chain_releases_after_grace_and_preserves_run_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, project_id = self.make_project(root)
+            runner = Runner(home)
+            active, run_dir, _receipt = self.make_active(runner, project_id)
+            missing_at = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
+
+            with mock.patch(
+                "perpetuum_app.runner.sessions.session_exists",
+                return_value=False,
+            ), mock.patch.object(runner, "current_time", return_value=missing_at):
+                self.assertFalse(runner.reconcile_active(active, [project_id]))
+            self.write_project_state(
+                home,
+                project_id,
+                status="idle",
+                current_story=None,
+                active_sessions=[],
+                last_activity_at="2026-09-06T12:01:00Z",
+            )
+            settled_at = missing_at + timedelta(minutes=5)
+            with mock.patch(
+                "perpetuum_app.runner.sessions.session_exists",
+                return_value=False,
+            ), mock.patch.object(runner, "current_time", return_value=settled_at):
+                self.assertFalse(runner.reconcile_active(active, [project_id]))
+
+            self.assertEqual(active["chain_settled_since"], "2026-09-06T12:05:00Z")
+            runner.state["active_projects"] = {project_id: active}
+            with mock.patch(
+                "perpetuum_app.runner.sessions.session_exists",
+                return_value=False,
+            ), mock.patch.object(
+                runner,
+                "current_time",
+                return_value=settled_at + timedelta(minutes=5),
+            ):
+                runner.reconcile_projects()
+
+            self.assertNotIn(project_id, runner.state["active_projects"])
+            self.assertTrue(run_dir.is_dir())
             escalation = (
                 storage.project_dir(home, project_id) / "escalations.md"
             ).read_text()
-            self.assertIn("写入完成回执前消失", escalation)
-            state = storage.load_project_state(home, project_id)
-            self.assertEqual(state["status"], "control_blocked")
+            self.assertIn("稳定链路未写入完成回执", escalation)
+
+    def test_recovered_carrier_clears_all_loss_markers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, project_id = self.make_project(root)
+            runner = Runner(home)
+            active, run_dir, _receipt = self.make_active(runner, project_id)
+            active.update(
+                {
+                    "carrier_missing_since": "2026-09-06T12:00:00Z",
+                    "top_session_orphaned_at": "2026-09-06T12:05:00Z",
+                    "chain_settled_since": "2026-09-06T12:06:00Z",
+                }
+            )
+
+            with mock.patch(
+                "perpetuum_app.runner.sessions.session_exists",
+                return_value=True,
+            ), mock.patch.object(runner, "event") as event:
+                completed = runner.reconcile_active(active, [project_id])
+
+            self.assertFalse(completed)
+            self.assertTrue(run_dir.is_dir())
+            self.assertNotIn("carrier_missing_since", active)
+            self.assertNotIn("top_session_orphaned_at", active)
+            self.assertNotIn("chain_settled_since", active)
+            event.assert_called_once_with(
+                "top_session_recovered",
+                role="project",
+                run_id=active["run_id"],
+                session=active["session"],
+                project_ids=[project_id],
+            )
+
+    def test_idle_state_older_than_carrier_loss_never_releases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, project_id = self.make_project(root)
+            runner = Runner(home)
+            active, run_dir, _receipt = self.make_active(runner, project_id)
+            missing_at = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
+            self.write_project_state(
+                home,
+                project_id,
+                status="idle",
+                current_story=None,
+                active_sessions=[],
+                last_activity_at="2026-09-06T11:59:59Z",
+            )
+
+            with mock.patch(
+                "perpetuum_app.runner.sessions.session_exists",
+                return_value=False,
+            ), mock.patch.object(runner, "current_time", return_value=missing_at):
+                self.assertFalse(runner.reconcile_active(active, [project_id]))
+            with mock.patch(
+                "perpetuum_app.runner.sessions.session_exists",
+                return_value=False,
+            ), mock.patch.object(
+                runner,
+                "current_time",
+                return_value=missing_at + timedelta(days=7),
+            ), mock.patch.object(
+                runner,
+                "write_control_escalation",
+            ) as escalate:
+                completed = runner.reconcile_active(active, [project_id])
+
+            self.assertFalse(completed)
+            self.assertNotIn("chain_settled_since", active)
+            self.assertTrue(run_dir.is_dir())
+            escalate.assert_not_called()
 
     def test_due_projects_launch_independently_in_same_tick(self):
         with tempfile.TemporaryDirectory() as directory:
